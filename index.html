@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>엠즈 입고 및 회송 대시보드 v2.1</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #1e293b; }
+    .drop-active { border-color: #2563eb !important; background-color: #eff6ff !important; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body class="p-4 md:p-6 max-w-6xl mx-auto">
+
+  <!-- 상단 헤더 -->
+  <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+    <div>
+      <div class="flex items-center gap-2.5">
+        <span class="text-2xl">🚚</span>
+        <h1 class="text-xl font-bold text-slate-900">엠즈 입고 및 회송 대시보드</h1>
+        <span class="text-xs font-semibold px-2.5 py-1 bg-blue-600 text-white rounded-full">v2.1 자동분리</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1.5">
+        기본 입고 비용: 240,000원 + 10,000원(까데기) = <b>250,000원</b> | 월별 엑셀 업로드 시 <b>입고요청일 기준 일자별 자동 분리</b>
+      </p>
+    </div>
+    <div class="flex flex-wrap items-center gap-2">
+      <button onclick="exportData()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i> 백업 저장
+      </button>
+      <label class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer">
+        <i data-lucide="upload" class="w-3.5 h-3.5"></i> 백업 복원
+        <input type="file" id="jsonImport" accept=".json" class="hidden" onchange="importData(event)">
+      </label>
+      <button onclick="resetToOctData()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-blue-600 bg-blue-50 hover:bg-blue-100 rounded-lg transition">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i> 10월 데이터 복원
+      </button>
+      <button onclick="clearAllData()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition">
+        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 전체 비우기
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI 요약 카드 -->
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">총 입고 일수 (건수)</div>
+      <div class="text-2xl font-bold text-slate-800" id="statCount">0건</div>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">누적 발주 박스 (발주열)</div>
+      <div class="text-2xl font-bold text-blue-600" id="statBoxes">0 box</div>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">누적 환산 팩 (환산열)</div>
+      <div class="text-2xl font-bold text-emerald-600" id="statPks">0 pk</div>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">누적 운임 비용</div>
+      <div class="text-2xl font-bold text-slate-800" id="statCost">0원</div>
+    </div>
+  </section>
+
+  <!-- 엑셀 업로드 및 옵션 설정 영역 -->
+  <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm mb-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 items-center">
+      <!-- label 태그를 사용하여 노션 임베드 내에서도 클릭 시 100% 파일 창이 열리도록 보장 -->
+      <label id="dropZone" for="excelInput" class="lg:col-span-2 border-2 border-dashed border-blue-300 bg-blue-50/20 rounded-xl p-6 text-center hover:border-blue-600 hover:bg-blue-50/50 transition cursor-pointer flex flex-col items-center justify-center min-h-[145px]">
+        <input type="file" id="excelInput" accept=".xlsx,.xls,.csv" class="hidden" multiple onchange="handleFiles(this.files)">
+        <div class="w-11 h-11 rounded-full bg-blue-600 text-white flex items-center justify-center mb-2.5 shadow-sm">
+          <i data-lucide="file-up" class="w-5 h-5"></i>
+        </div>
+        <p class="text-sm font-bold text-slate-800">여기를 클릭하여 엠즈 입고 내역 엑셀 파일(.xls, .xlsx) 선택</p>
+        <p class="text-xs text-slate-500 mt-1">노션 임베드에서는 드래그 대신 <b>클릭해서 파일 선택</b>을 권장합니다 (입고요청일 기준 일자별 자동 분리)</p>
+        <div id="uploadStatusBanner" class="hidden mt-3 px-3 py-1.5 rounded-lg bg-emerald-100 text-emerald-800 text-xs font-semibold"></div>
+      </label>
+
+      <!-- 기본값 설정 패널 -->
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-3">
+        <div class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+          <i data-lucide="settings-2" class="w-3.5 h-3.5 text-slate-500"></i> 업로드 기본값 설정
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">구분</label>
+            <select id="defaultType" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+              <option value="입고">입고</option>
+              <option value="회송">회송</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">입고 상태</label>
+            <select id="defaultStatus" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+              <option value="입고 완료">입고 완료</option>
+              <option value="입고 예정">입고 예정</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">화물 기사</label>
+            <input type="text" id="defaultDriver" value="김민겸 기사" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">회당 입고 비용 (원)</label>
+            <input type="number" id="defaultCost" value="250000" step="10000" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 필터 및 검색 바 -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="dateTabs"></div>
+    <div class="relative w-full sm:w-64">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input type="text" id="searchInput" oninput="renderRecords()" placeholder="상품명, 상품코드, 날짜 검색..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500">
+    </div>
+  </div>
+
+  <!-- 입고 내역 리스트 영역 -->
+  <section id="recordsContainer" class="space-y-4"></section>
+
+  <!-- 토스트 알림 -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 pointer-events-none transition-opacity duration-200 flex items-center gap-2 z-50">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toastMsg">완료되었습니다.</span>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'ms_inbound_records_v2_1';
+
+    const OCT_DEFAULT_DATA = [
+      {"id": "rec_20261030", "date": "2026-10-30", "orderDate": "2026-10-29", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (216box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 216, "totalPks": 996, "items": [{"code": "157787", "name": "M(곤트란)먹물포카치아생지(신)_20ea*8pk/box", "spec": "20ea/pk", "unit": "BOX", "ipsu": 8, "box": 21, "pk": 168}, {"code": "157812", "name": "M(곤트란)올리브식빵생지_12ea*6pk/box", "spec": "12ea/pk", "unit": "BOX", "ipsu": 6, "box": 17, "pk": 102}, {"code": "157840", "name": "M(르미디)[생지]샌드위치용바게트생지_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163238", "name": "M(New_곤트란)무화과트라디시옹(소)_4ea*10pk/box", "spec": "4ea*10pk/box", "unit": "BOX", "ipsu": 10, "box": 21, "pk": 210}, {"code": "163568", "name": "M(New_곤트란)밤사과패스츄리생지(막대)_3ea*4pk/box", "spec": "3ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 23, "pk": 69}, {"code": "163571", "name": "M(New_곤트란)빵오르방멀티세레알_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 23, "pk": 69}, {"code": "163572", "name": "M(New_곤트란)퀸아망생지(막대)_2ea*4pk/box", "spec": "2ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "164053", "name": "M(New_곤트란)쇼숑오뽐므생지(합포장)_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 1, "box": 13, "pk": 13}, {"code": "167077", "name": "M[곤트란]New 플레인깜빠뉴 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 23, "pk": 92}, {"code": "163309", "name": "M(New_곤트란)빵드깜빠뉴_3ea/box", "spec": "3ea/box", "unit": "BOX", "ipsu": 1, "box": 9, "pk": 9}]},
+      {"id": "rec_20261028", "date": "2026-10-28", "orderDate": "2026-10-27", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (218box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 218, "totalPks": 849, "items": [{"code": "157806", "name": "M(곤트란)뺑오쇼콜라생지_36ea*4pk/box", "spec": "36ea/pk", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "157828", "name": "M(곤트란)프레첼생지_40ea*4pk/box", "spec": "40ea/pk", "unit": "BOX", "ipsu": 4, "box": 44, "pk": 176}, {"code": "157840", "name": "M(르미디)[생지]샌드위치용바게트생지_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 63, "pk": 252}, {"code": "163241", "name": "M(New_곤트란)빵꽁플레_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 21, "pk": 84}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163571", "name": "M(New_곤트란)빵오르방멀티세레알_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 23, "pk": 69}, {"code": "167077", "name": "M[곤트란]New 플레인깜빠뉴 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 23, "pk": 92}]},
+      {"id": "rec_20261026", "date": "2026-10-26", "orderDate": "2026-10-23", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (220box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 220, "totalPks": 902, "items": [{"code": "157794", "name": "M(곤트란)바게트트라디시옹_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 21, "pk": 84}, {"code": "157828", "name": "M(곤트란)프레첼생지_40ea*4pk/box", "spec": "40ea/pk", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "157840", "name": "M(르미디)[생지]샌드위치용바게트생지_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163227", "name": "M(New_곤트란)깜빠뉴크랜베리아망드(대)_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 5, "pk": 20}, {"code": "163238", "name": "M(New_곤트란)무화과트라디시옹(소)_4ea*10pk/box", "spec": "4ea*10pk/box", "unit": "BOX", "ipsu": 10, "box": 12, "pk": 120}, {"code": "163241", "name": "M(New_곤트란)빵꽁플레_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 23, "pk": 92}, {"code": "163309", "name": "M(New_곤트란)빵드깜빠뉴_3ea/box", "spec": "3ea/box", "unit": "BOX", "ipsu": 1, "box": 2, "pk": 2}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "163571", "name": "M(New_곤트란)빵오르방멀티세레알_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "163572", "name": "M(New_곤트란)퀸아망생지(막대)_2ea*4pk/box", "spec": "2ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "169675", "name": "M[곤트란]데니쉬판생지_3ea*4pk/box", "spec": "3ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 3, "pk": 12}, {"code": "169678", "name": "M[곤트란]프리미엄_모닝빵_생지_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}]},
+      {"id": "rec_20261021", "date": "2026-10-21", "orderDate": "2026-10-20", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (221box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 221, "totalPks": 920, "items": [{"code": "157806", "name": "M(곤트란)뺑오쇼콜라생지_36ea*4pk/box", "spec": "36ea/pk", "unit": "BOX", "ipsu": 4, "box": 15, "pk": 60}, {"code": "163233", "name": "M(New_곤트란)올리브치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 12, "pk": 48}, {"code": "163238", "name": "M(New_곤트란)무화과트라디시옹(소)_4ea*10pk/box", "spec": "4ea*10pk/box", "unit": "BOX", "ipsu": 10, "box": 12, "pk": 120}, {"code": "163309", "name": "M(New_곤트란)빵드깜빠뉴_3ea/box", "spec": "3ea/box", "unit": "BOX", "ipsu": 1, "box": 8, "pk": 8}, {"code": "163310", "name": "M(New_곤트란)소금버터빵생지_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 10, "pk": 60}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "163571", "name": "M(New_곤트란)빵오르방멀티세레알_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 10, "pk": 30}, {"code": "167077", "name": "M[곤트란]New 플레인깜빠뉴 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "167074", "name": "M[곤트란]New 빵오멀티세레알 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 30, "pk": 120}, {"code": "167074", "name": "M[곤트란]New 빵오멀티세레알 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 58, "pk": 232}]},
+      {"id": "rec_20261019", "date": "2026-10-19", "orderDate": "2026-10-16", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (203box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 203, "totalPks": 920, "items": [{"code": "157787", "name": "M(곤트란)먹물포카치아생지(신)_20ea*8pk/box", "spec": "20ea/pk", "unit": "BOX", "ipsu": 8, "box": 10, "pk": 80}, {"code": "157806", "name": "M(곤트란)뺑오쇼콜라생지_36ea*4pk/box", "spec": "36ea/pk", "unit": "BOX", "ipsu": 4, "box": 14, "pk": 56}, {"code": "157812", "name": "M(곤트란)올리브식빵생지_12ea*6pk/box", "spec": "12ea/pk", "unit": "BOX", "ipsu": 6, "box": 18, "pk": 108}, {"code": "157828", "name": "M(곤트란)프레첼생지_40ea*4pk/box", "spec": "40ea/pk", "unit": "BOX", "ipsu": 4, "box": 17, "pk": 68}, {"code": "162410", "name": "M(바로가)닥터치아바타생지_2400g*4pk/box", "spec": "2400g*4pk/box", "unit": "BOX", "ipsu": 4, "box": 10, "pk": 40}, {"code": "162411", "name": "M(바로가)단과자생지_40ea*8pk/box", "spec": "40ea*8pk/box", "unit": "BOX", "ipsu": 8, "box": 3, "pk": 24}, {"code": "162414", "name": "M(바로가)소금버터빵생지_30ea*8pk/box", "spec": "30ea*8pk/box", "unit": "BOX", "ipsu": 8, "box": 5, "pk": 40}, {"code": "163234", "name": "M(New_곤트란)플레인치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 8, "pk": 32}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163572", "name": "M(New_곤트란)퀸아망생지(막대)_2ea*4pk/box", "spec": "2ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 38, "pk": 152}, {"code": "167074", "name": "M[곤트란]New 빵오멀티세레알 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "167077", "name": "M[곤트란]New 플레인깜빠뉴 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "169678", "name": "M[곤트란]프리미엄_모닝빵_생지_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 14, "pk": 56}]},
+      {"id": "rec_20261016", "date": "2026-10-16", "orderDate": "2026-10-15", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (216box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 216, "totalPks": 986, "items": [{"code": "157787", "name": "M(곤트란)먹물포카치아생지(신)_20ea*8pk/box", "spec": "20ea/pk", "unit": "BOX", "ipsu": 8, "box": 22, "pk": 176}, {"code": "163241", "name": "M(New_곤트란)빵꽁플레_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 21, "pk": 84}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 68, "pk": 272}, {"code": "163567", "name": "M(New_곤트란)몽마르트생지(막대)_2ea*6pk/box", "spec": "2ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 20, "pk": 120}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "163571", "name": "M(New_곤트란)빵오르방멀티세레알_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "167077", "name": "M[곤트란]New 플레인깜빠뉴 생지(12ea*4pk/BOX)", "spec": "12ea/PK", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "169677", "name": "M[곤트란]밀크브리오슈_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 19, "pk": 114}]},
+      {"id": "rec_20261014", "date": "2026-10-14", "orderDate": "2026-10-13", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (218box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 218, "totalPks": 1090, "items": [{"code": "157787", "name": "M(곤트란)먹물포카치아생지(신)_20ea*8pk/box", "spec": "20ea/pk", "unit": "BOX", "ipsu": 8, "box": 22, "pk": 176}, {"code": "157794", "name": "M(곤트란)바게트트라디시옹_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 10, "pk": 40}, {"code": "157829", "name": "M(곤트란)프로마쥬블랑생지_20ea*8pk/box", "spec": "20ea/pk", "unit": "BOX", "ipsu": 8, "box": 7, "pk": 56}, {"code": "163234", "name": "M(New_곤트란)플레인치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163241", "name": "M(New_곤트란)빵꽁플레_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 21, "pk": 84}, {"code": "163310", "name": "M(New_곤트란)소금버터빵생지_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 22, "pk": 132}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163567", "name": "M(New_곤트란)몽마르트생지(막대)_2ea*6pk/box", "spec": "2ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 22, "pk": 132}, {"code": "163568", "name": "M(New_곤트란)밤사과패스츄리생지(막대)_3ea*4pk/box", "spec": "3ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 15, "pk": 60}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "169677", "name": "M[곤트란]밀크브리오슈_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 18, "pk": 108}, {"code": "169678", "name": "M[곤트란]프리미엄_모닝빵_생지_20ea*4pk/box", "spec": "20ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 15, "pk": 60}]},
+      {"id": "rec_20261008", "date": "2026-10-08", "orderDate": "2026-10-07", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (218box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 218, "totalPks": 1006, "items": [{"code": "157794", "name": "M(곤트란)바게트트라디시옹_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 8, "pk": 32}, {"code": "163227", "name": "M(New_곤트란)깜빠뉴크랜베리아망드(대)_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 6, "pk": 24}, {"code": "163234", "name": "M(New_곤트란)플레인치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 44, "pk": 176}, {"code": "163310", "name": "M(New_곤트란)소금버터빵생지_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 66, "pk": 396}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 44, "pk": 176}, {"code": "163567", "name": "M(New_곤트란)몽마르트생지(막대)_2ea*6pk/box", "spec": "2ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 10, "pk": 60}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 22, "pk": 66}, {"code": "163572", "name": "M(New_곤트란)퀸아망생지(막대)_2ea*4pk/box", "spec": "2ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 11, "pk": 44}, {"code": "169675", "name": "M[곤트란]데니쉬판생지_3ea*4pk/box", "spec": "3ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 3, "pk": 12}, {"code": "169676", "name": "M[곤트란]만겹판생지_5ea*5pk/box", "spec": "5ea*5pk/box", "unit": "BOX", "ipsu": 5, "box": 4, "pk": 20}]},
+      {"id": "rec_20261006", "date": "2026-10-06", "orderDate": "2026-10-02", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (219box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 219, "totalPks": 964, "items": [{"code": "163227", "name": "M(New_곤트란)깜빠뉴크랜베리아망드(대)_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 21, "pk": 84}, {"code": "163233", "name": "M(New_곤트란)올리브치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 44, "pk": 176}, {"code": "163234", "name": "M(New_곤트란)플레인치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 88, "pk": 352}, {"code": "163310", "name": "M(New_곤트란)소금버터빵생지_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 22, "pk": 132}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163567", "name": "M(New_곤트란)몽마르트생지(막대)_2ea*6pk/box", "spec": "2ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 22, "pk": 132}]},
+      {"id": "rec_20261002", "date": "2026-10-02", "orderDate": "2026-10-01", "center": "용인 남사센터", "type": "입고", "status": "입고 완료", "title": "정기 입고 (209box)", "driver": "김민겸 기사", "cost": 250000, "totalBoxes": 209, "totalPks": 960, "items": [{"code": "157794", "name": "M(곤트란)바게트트라디시옹_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 18, "pk": 72}, {"code": "157829", "name": "M(곤트란)프로마쥬블랑생지_20ea*8pk/box", "spec": "20ea/pk", "unit": "BOX", "ipsu": 8, "box": 5, "pk": 40}, {"code": "163233", "name": "M(New_곤트란)올리브치아바타생지_24ea*4pk/box", "spec": "24ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163241", "name": "M(New_곤트란)빵꽁플레_6ea*4pk/box", "spec": "6ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 15, "pk": 60}, {"code": "163310", "name": "M(New_곤트란)소금버터빵생지_40ea*6pk/box", "spec": "40ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 44, "pk": 264}, {"code": "163311", "name": "M(New_곤트란)크로와상생지_48ea*4pk/box", "spec": "48ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 22, "pk": 88}, {"code": "163567", "name": "M(New_곤트란)몽마르트생지(막대)_2ea*6pk/box", "spec": "2ea*6pk/box", "unit": "BOX", "ipsu": 6, "box": 17, "pk": 102}, {"code": "163568", "name": "M(New_곤트란)밤사과패스츄리생지(막대)_3ea*4pk/box", "spec": "3ea*4pk/box", "unit": "BOX", "ipsu": 4, "box": 42, "pk": 168}, {"code": "163570", "name": "M(New_곤트란)빵오르방나튀렐_4ea*3pk/box", "spec": "4ea*3pk/box", "unit": "BOX", "ipsu": 3, "box": 21, "pk": 63}, {"code": "169676", "name": "M[곤트란]만겹판생지_5ea*5pk/box", "spec": "5ea*5pk/box", "unit": "BOX", "ipsu": 5, "box": 3, "pk": 15}]}
+    ];
+
+    let records = [];
+    let currentFilter = 'ALL';
+
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      loadFromStorage();
+      setupDragAndDrop();
+    });
+
+    function setupDragAndDrop() {
+      const dropZone = document.getElementById('dropZone');
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); dropZone.classList.add('drop-active'); });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, e => { e.preventDefault(); e.stopPropagation(); dropZone.classList.remove('drop-active'); });
+      });
+      dropZone.addEventListener('drop', e => {
+        if (e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files.length) {
+          handleFiles(e.dataTransfer.files);
+        }
+      });
+    }
+
+    function setBannerStatus(msg, isError = false) {
+      const banner = document.getElementById('uploadStatusBanner');
+      banner.classList.remove('hidden', 'bg-emerald-100', 'text-emerald-800', 'bg-rose-100', 'text-rose-800');
+      banner.classList.add(isError ? 'bg-rose-100' : 'bg-emerald-100', isError ? 'text-rose-800' : 'text-emerald-800');
+      banner.textContent = msg;
+    }
+
+    function handleFiles(files) {
+      if (!files || files.length === 0) return;
+      setBannerStatus(`⏳ '${files[0].name}' 파일을 읽는 중입니다...`);
+
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          try {
+            const data = new Uint8Array(e.target.result);
+            // codepage: 949 옵션 추가로 구형 한글 .xls 파일 인코딩 깨짐 완벽 방지
+            const workbook = XLSX.read(data, { type: 'array', cellDates: true, codepage: 949 });
+            const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+            const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+            parseMsExcel(rows, file.name);
+          } catch (err) {
+            setBannerStatus(`❌ 파일 읽기 오류: ${err.message}`, true);
+            showToast('엑셀 파일을 읽는 중 오류가 발생했습니다.');
+          }
+        };
+        reader.readAsArrayBuffer(file);
+      });
+      document.getElementById('excelInput').value = '';
+    }
+
+    function parseMsExcel(rows, fileName) {
+      if (!rows || rows.length < 2) {
+        setBannerStatus('❌ 엑셀 시트에 데이터가 없습니다.', true);
+        return;
+      }
+
+      let colReqDate = -1, colBuyDate = -1, colOrderDate = -1;
+      let colCode = -1, colName = -1, colSpec = -1, colUnit = -1, colIpsu = -1, colBox = -1, colPk = -1, colCenter = -1;
+      let startRow = 1;
+
+      for (let r = 0; r < Math.min(10, rows.length); r++) {
+        const rowStr = rows[r].map(c => String(c).trim());
+        rowStr.forEach((val, idx) => {
+          if (val === '입고요청일' || /입고일|요청일/.test(val)) colReqDate = idx;
+          if (val === '매입일자' || /매입일/.test(val)) colBuyDate = idx;
+          if (val === '발주일자' || /발주일/.test(val)) colOrderDate = idx;
+          if (val === '입고처' || /센터|납품처/.test(val)) colCenter = idx;
+          if (val === '상품코드' || /품목코드/.test(val)) colCode = idx;
+          if (val === '상품명' || (/품목명|품명|상품|품목/.test(val) && !/코드/.test(val))) colName = idx;
+          if (val === '규격') colSpec = idx;
+          if (val === '단위') colUnit = idx;
+          if (val === '입수') colIpsu = idx;
+          if (val === '발주' || /박스수|발주량|발주수량/.test(val)) colBox = idx;
+          if (val === '환산' || /환산수량|팩수|pk/i.test(val)) colPk = idx;
+        });
+        if (colName !== -1) { startRow = r + 1; break; }
+      }
+
+      // 만약 구형 .xls 인코딩 문제로 한글 헤더를 못 찾았더라도, 엠즈 20열 고정 위치로 즉시 매핑
+      if (colName === -1) {
+        const sampleRow = rows[1] || rows[0];
+        if (sampleRow && sampleRow.length >= 17) {
+          colOrderDate = 2; colReqDate = 4; colCenter = 6; colCode = 7; colName = 8;
+          colSpec = 9; colUnit = 11; colIpsu = 12; colBox = 15; colPk = 16; colBuyDate = 19;
+          startRow = 1;
+        }
+      }
+
+      const groupedByDate = {};
+      const defaultDate = new Date().toISOString().slice(0, 10);
+
+      for (let i = startRow; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const itemName = String(row[colName] || '').trim();
+        if (!itemName || /합계|총계|소계|상품명/i.test(itemName)) continue;
+
+        let rawDate = (colReqDate !== -1 && row[colReqDate]) ? row[colReqDate] :
+                      (colBuyDate !== -1 && row[colBuyDate]) ? row[colBuyDate] :
+                      (colOrderDate !== -1 && row[colOrderDate]) ? row[colOrderDate] : '';
+        const dateKey = normalizeDate(rawDate) || defaultDate;
+        const orderDateStr = (colOrderDate !== -1 && row[colOrderDate]) ? normalizeDate(row[colOrderDate]) : '';
+        const centerStr = (colCenter !== -1 && row[colCenter]) ? String(row[colCenter]).trim() : '용인 남사센터';
+
+        const ipsu = colIpsu !== -1 ? (parseFloat(String(row[colIpsu]).replace(/[^0-9.]/g, '')) || 1) : 1;
+        let boxCount = colBox !== -1 ? (parseFloat(String(row[colBox]).replace(/[^0-9.]/g, '')) || 0) : 0;
+        let pkCount = colPk !== -1 ? (parseFloat(String(row[colPk]).replace(/[^0-9.]/g, '')) || 0) : 0;
+
+        if (boxCount > 0 && pkCount === 0) pkCount = boxCount * ipsu;
+        if (pkCount > 0 && boxCount === 0 && ipsu > 0) boxCount = Math.round((pkCount / ipsu) * 10) / 10;
+        if (boxCount <= 0 && pkCount <= 0) continue;
+
+        if (!groupedByDate[dateKey]) {
+          groupedByDate[dateKey] = { date: dateKey, orderDate: orderDateStr, center: centerStr, items: [] };
+        }
+
+        groupedByDate[dateKey].items.push({
+          code: colCode !== -1 ? String(row[colCode] || '').trim() : '',
+          name: itemName,
+          spec: colSpec !== -1 ? String(row[colSpec] || '').trim() : '',
+          unit: colUnit !== -1 ? String(row[colUnit] || 'BOX').trim() : 'BOX',
+          ipsu: ipsu,
+          box: boxCount,
+          pk: pkCount
+        });
+      }
+
+      const dateKeys = Object.keys(groupedByDate).sort();
+      if (dateKeys.length === 0) {
+        setBannerStatus('❌ 유효한 입고 품목 행을 찾지 못했습니다.', true);
+        return;
+      }
+
+      const type = document.getElementById('defaultType').value;
+      const status = document.getElementById('defaultStatus').value;
+      const driver = document.getElementById('defaultDriver').value;
+      const cost = parseInt(document.getElementById('defaultCost').value, 10) || 250000;
+
+      let totalItemsParsed = 0;
+      dateKeys.forEach(dKey => {
+        const grp = groupedByDate[dKey];
+        totalItemsParsed += grp.items.length;
+        const totalBoxes = Math.round(grp.items.reduce((s, it) => s + it.box, 0));
+        const totalPks = Math.round(grp.items.reduce((s, it) => s + it.pk, 0));
+        const recId = 'rec_' + dKey.replace(/-/g, '');
+
+        const newRecord = {
+          id: recId,
+          date: dKey,
+          orderDate: grp.orderDate,
+          center: grp.center,
+          type: type,
+          status: status,
+          title: `${type === '입고' ? '정기 입고' : '회송'} (${totalBoxes}box)`,
+          driver: driver,
+          cost: cost,
+          totalBoxes: totalBoxes,
+          totalPks: totalPks,
+          items: grp.items
+        };
+
+        const existIdx = records.findIndex(r => r.date === dKey);
+        if (existIdx !== -1) records[existIdx] = newRecord;
+        else records.push(newRecord);
+      });
+
+      records.sort((a, b) => b.date.localeCompare(a.date));
+      currentFilter = 'ALL';
+      saveToStorage();
+      renderAll();
+      setBannerStatus(`✅ '${fileName}' 업로드 성공! 총 ${dateKeys.length}개 일자 (${totalItemsParsed}개 품목) 정리 완료`);
+      showToast(`총 ${dateKeys.length}개 일자 내역이 성공적으로 반영되었습니다!`);
+    }
+
+    function normalizeDate(val) {
+      if (!val) return '';
+      if (val instanceof Date) return val.toISOString().slice(0, 10);
+      const str = String(val).trim().replace(/[./년월]/g, '-').replace(/일/g, '');
+      const m = str.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+      if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+      return '';
+    }
+
+    function renderAll() {
+      renderStats();
+      renderDateTabs();
+      renderRecords();
+      lucide.createIcons();
+    }
+
+    function renderStats() {
+      const filtered = getFilteredRecords();
+      const count = filtered.length;
+      const boxes = filtered.reduce((acc, r) => acc + (r.totalBoxes || 0), 0);
+      const pks = filtered.reduce((acc, r) => acc + (r.totalPks || 0), 0);
+      const cost = filtered.reduce((acc, r) => acc + (r.cost || 0), 0);
+
+      document.getElementById('statCount').textContent = `${count}건`;
+      document.getElementById('statBoxes').textContent = `${boxes.toLocaleString()} box`;
+      document.getElementById('statPks').textContent = `${pks.toLocaleString()} pk`;
+      document.getElementById('statCost').textContent = `${cost.toLocaleString()}원`;
+    }
+
+    function renderDateTabs() {
+      const months = Array.from(new Set(records.map(r => r.date.slice(0, 7)))).sort().reverse();
+      const dates = records.map(r => r.date).sort().reverse();
+      const container = document.getElementById('dateTabs');
+
+      let html = `<button onclick="setFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${currentFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">전체 (${records.length}건)</button>`;
+
+      months.forEach(m => {
+        const [y, mm] = m.split('-');
+        const active = currentFilter === m;
+        html += `<button onclick="setFilter('${m}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${active ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">${y}년 ${parseInt(mm, 10)}월</button>`;
+      });
+
+      dates.forEach(d => {
+        const shortD = d.slice(5).replace('-', '/');
+        const active = currentFilter === d;
+        html += `<button onclick="setFilter('${d}')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${active ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${shortD}</button>`;
+      });
+
+      container.innerHTML = html;
+    }
+
+    function setFilter(f) {
+      currentFilter = f;
+      renderAll();
+    }
+
+    function getFilteredRecords() {
+      const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+      return records.filter(r => {
+        const matchFilter = currentFilter === 'ALL' || r.date.startsWith(currentFilter);
+        const matchQuery = !q || r.date.includes(q) || r.title.toLowerCase().includes(q) || r.driver.toLowerCase().includes(q) || r.items.some(i => i.name.toLowerCase().includes(q) || (i.code && i.code.includes(q)));
+        return matchFilter && matchQuery;
+      });
+    }
+
+    function renderRecords() {
+      const container = document.getElementById('recordsContainer');
+      const filtered = getFilteredRecords();
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-10 text-center text-slate-400 text-xs">
+            표시할 입고 내역이 없습니다. 상단에 엑셀 파일을 업로드하거나 [10월 데이터 복원] 버튼을 눌러보세요!
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(rec => {
+        const itemsCopyText = rec.items.map((it, idx) => `${idx + 1}. ${it.name}`).join('\n');
+        const pkCopyText = rec.items.map(it => `${it.pk}pk`).join('\n');
+
+        return `
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <div class="p-4 sm:px-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/60">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-900 text-white">${rec.date}</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-semibold ${rec.type === '입고' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${rec.type}</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">${rec.status}</span>
+              <h3 class="text-sm font-bold text-slate-800">${rec.title}</h3>
+              <span class="text-xs text-slate-400 font-medium">(${rec.items.length}개 품목 / 총 ${rec.totalPks.toLocaleString()}pk)</span>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-slate-600">
+              ${rec.center ? `<span class="text-slate-400">📍 ${rec.center}</span>` : ''}
+              <span>🚚 <b>${rec.driver}</b></span>
+              <span>💰 <b>${rec.cost.toLocaleString()}원</b></span>
+              <button onclick="deleteRecord('${rec.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="이 날짜 삭제">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <div class="px-4 sm:px-5 py-2.5 bg-blue-50/40 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-[11px] font-medium text-slate-500">📋 기존 노션 DB 표 붙여넣기용 원클릭 복사:</span>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="copyText('${escapeQuotes(rec.title)}', '${rec.date} 업무명이 복사되었습니다.')" class="px-2.5 py-1 bg-white hover:bg-blue-50 text-slate-700 border border-slate-200 rounded-md text-[11px] font-medium transition">
+                1. 업무명 (${rec.title}) 복사
+              </button>
+              <button onclick="copyText(\`${escapeBackticks(itemsCopyText)}\`, '${rec.date} 품목 목록(${rec.items.length}개)이 복사되었습니다.')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[11px] font-medium transition">
+                2. 품목 목록 전체 복사
+              </button>
+              <button onclick="copyText(\`${escapeBackticks(pkCopyText)}\`, '${rec.date} 확인 내용(pk 수량)이 복사되었습니다.')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-medium transition">
+                3. 확인 내용(pk) 전체 복사
+              </button>
+            </div>
+          </div>
+
+          <div class="p-4 sm:px-5 overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-400">
+                  <th class="py-2 w-10">No.</th>
+                  <th class="py-2 w-20">상품코드</th>
+                  <th class="py-2">상품명</th>
+                  <th class="py-2 text-center w-16">입수</th>
+                  <th class="py-2 text-right w-24">발주 (box)</th>
+                  <th class="py-2 text-right w-24">환산 (pk)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                ${rec.items.map((item, idx) => `
+                  <tr class="hover:bg-slate-50/80">
+                    <td class="py-2 text-slate-400 font-medium">${idx + 1}</td>
+                    <td class="py-2 text-slate-400 font-mono text-[11px]">${item.code || '-'}</td>
+                    <td class="py-2 font-medium text-slate-800">${item.name}</td>
+                    <td class="py-2 text-center text-slate-500">${item.ipsu || '-'}</td>
+                    <td class="py-2 text-right font-semibold text-blue-600">${item.box.toLocaleString()} box</td>
+                    <td class="py-2 text-right font-semibold text-emerald-600">${item.pk.toLocaleString()} pk</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+              <tfoot>
+                <tr class="border-t-2 border-slate-200 bg-slate-50/50 font-bold text-slate-800">
+                  <td colspan="4" class="py-2.5 pl-2">일일 합계 (${rec.items.length}개 품목)</td>
+                  <td class="py-2.5 text-right text-blue-600">${rec.totalBoxes.toLocaleString()} box</td>
+                  <td class="py-2.5 text-right text-emerald-600">${rec.totalPks.toLocaleString()} pk</td>
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>`;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    function copyText(text, msg) {
+      navigator.clipboard.writeText(text).then(() => showToast(msg));
+    }
+
+    function escapeBackticks(str) {
+      return String(str).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    }
+
+    function escapeQuotes(str) {
+      return String(str).replace(/'/g, "\\'");
+    }
+
+    function deleteRecord(id) {
+      records = records.filter(r => r.id !== id);
+      saveToStorage();
+      renderAll();
+      showToast('해당 일자 내역이 삭제되었습니다.');
+    }
+
+    function resetToOctData() {
+      records = JSON.parse(JSON.stringify(OCT_DEFAULT_DATA));
+      currentFilter = 'ALL';
+      saveToStorage();
+      renderAll();
+      showToast('10월 입고 내역(10건)이 복원되었습니다.');
+    }
+
+    function clearAllData() {
+      if (!confirm('저장된 모든 입고 내역을 비우시겠습니까?')) return;
+      records = [];
+      saveToStorage();
+      renderAll();
+    }
+
+    function saveToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function loadFromStorage() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try {
+          records = JSON.parse(saved);
+          if (!records || records.length === 0) records = JSON.parse(JSON.stringify(OCT_DEFAULT_DATA));
+        } catch (e) {
+          records = JSON.parse(JSON.stringify(OCT_DEFAULT_DATA));
+        }
+      } else {
+        records = JSON.parse(JSON.stringify(OCT_DEFAULT_DATA));
+      }
+      renderAll();
+    }
+
+    function exportData() {
+      const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `엠즈_입고이력_백업_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            records = imported;
+            saveToStorage();
+            renderAll();
+            showToast('데이터를 성공적으로 불러왔습니다.');
+          }
+        } catch (err) {
+          showToast('올바른 JSON 파일이 아닙니다.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => toast.classList.add('opacity-0'), 2600);
+    }
+  </script>
+</body>
+</html>
