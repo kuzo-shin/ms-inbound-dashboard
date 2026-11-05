@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>엠즈 입고 및 회송 대시보드 v3.4 Cloud</title>
+  <title>엠즈 입고 및 회송 통합 대시보드 v3.5</title>
   <!-- Tailwind CSS & SheetJS & Lucide Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -28,11 +28,11 @@
       <div class="flex items-center gap-2.5 flex-wrap">
         <span class="text-2xl">🚚</span>
         <h1 class="text-xl font-bold text-slate-900">엠즈 입고 및 회송 통합 대시보드</h1>
-        <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-600 text-white rounded-full">v3.4 Cloud</span>
+        <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-600 text-white rounded-full">v3.5 Cloud</span>
         <span id="cloudBadge" class="text-[11px] font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md">로컬 저장 모드</span>
       </div>
       <p class="text-xs text-slate-500 mt-1">
-        기본 입고 비용: 240,000원 + 10,000원(까데기) = <b>250,000원</b> | 엑셀 업로드 시 입고요청일 기준 자동 분류 및 실시간 클라우드 공유
+        기본 입고 비용: 240,000원 + 10,000원(까데기) = <b>250,000원</b> | 엑셀 자동 입고 분류 및 회송 운임 수기 관리 (실시간 클라우드 공유)
       </p>
     </div>
     <div class="flex flex-wrap items-center gap-1.5 no-print">
@@ -42,10 +42,10 @@
       <button onclick="pullFromCloud(false)" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-lg transition" title="클라우드 최신 데이터 새로고침">
         <i data-lucide="refresh-cw" class="w-3.5 h-3.5"></i> 새로고침
       </button>
-      <button onclick="openCloudModal()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition">
-        <i data-lucide="cloud" class="w-3.5 h-3.5"></i> 클라우드 설정
+      <button onclick="openCloudModal()" class="hidden items-center gap-1.5 px-3 py-2 text-xs font-medium text-indigo-600 bg-indigo-50 hover:bg-indigo-100 rounded-lg transition">
+        <i data-lucide="cloud" class="w-3.5 h-3.5"></i> 클라우드 동기화
       </button>
-      <button onclick="openConfirmModal('저장된 모든 입고 내역을 비우시겠습니까?', executeClearAll)" class="flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition">
+      <button onclick="openConfirmModal('저장된 모든 입고 및 회송 내역을 비우시겠습니까?', executeClearAll)" class="flex items-center gap-1.5 px-2.5 py-2 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition">
         <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 비우기
       </button>
     </div>
@@ -72,14 +72,7 @@
       <!-- 우측: 컴팩트 인라인 설정 바 -->
       <div class="flex flex-wrap items-center gap-2 bg-slate-50 px-3 py-2 rounded-xl border border-slate-200/70 text-xs">
         <div class="flex items-center gap-1">
-          <span class="text-[11px] text-slate-400 font-medium">구분</span>
-          <select id="defaultType" class="text-xs px-2 py-1 rounded-md border border-slate-200 bg-white font-medium">
-            <option value="입고">입고</option>
-            <option value="회송">회송</option>
-          </select>
-        </div>
-        <div class="flex items-center gap-1">
-          <span class="text-[11px] text-slate-400 font-medium">상태</span>
+          <span class="text-[11px] text-slate-400 font-medium">입고상태</span>
           <select id="defaultStatus" class="text-xs px-2 py-1 rounded-md border border-slate-200 bg-white font-medium">
             <option value="입고 완료">완료</option>
             <option value="입고 예정">예정</option>
@@ -128,8 +121,8 @@
       </div>
       <div class="col-span-2 bg-white px-4 py-3 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
         <div>
-          <div class="text-[11px] font-medium text-slate-400">누적 운임 정산액</div>
-          <div class="text-[11px] text-slate-400 mt-0.5">기본 250,000원/회 기준</div>
+          <div class="text-[11px] font-medium text-slate-400">누적 총 운임 정산액 (입고+회송)</div>
+          <div class="text-[11px] text-slate-400 mt-0.5" id="statCostBreakdown">입고 0원 / 회송 0원 (0건)</div>
         </div>
         <div class="text-xl font-bold text-slate-900" id="statCost">0원</div>
       </div>
@@ -140,7 +133,7 @@
       <div class="flex items-center justify-between mb-2.5">
         <div class="flex items-center gap-2">
           <span class="text-sm font-bold text-slate-900">📊 품목별 누적 입고 상위 TOP 5</span>
-          <span class="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold">(환산 팩 pk 기준)</span>
+          <span class="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold">(pk 기준)</span>
         </div>
         <button onclick="switchMainView('ANALYTICS')" class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 no-print">
           전체 순위 보기 <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
@@ -152,13 +145,17 @@
 
   <!-- 메인 뷰 전환 탭 & 검색/아코디언 컨트롤 바 -->
   <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 mb-4 no-print">
-    <!-- 뷰 전환 버튼 -->
-    <div class="inline-flex p-1 bg-slate-200/80 rounded-xl w-fit">
-      <button id="tabBtnDaily" onclick="switchMainView('DAILY')" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
+    <!-- 뷰 전환 버튼 (3개 탭) -->
+    <div class="inline-flex flex-wrap p-1 bg-slate-200/80 rounded-xl w-fit gap-0.5">
+      <button id="tabBtnDaily" onclick="switchMainView('DAILY')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition">
         <i data-lucide="calendar-days" class="w-3.5 h-3.5 text-blue-600"></i> 일자별 입고 내역
       </button>
-      <button id="tabBtnAnalytics" onclick="switchMainView('ANALYTICS')" class="flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+      <button id="tabBtnAnalytics" onclick="switchMainView('ANALYTICS')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
         <i data-lucide="bar-chart-3" class="w-3.5 h-3.5 text-indigo-600"></i> 품목별 누적 통계 & 순위
+      </button>
+      <button id="tabBtnReturns" onclick="switchMainView('RETURNS')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+        <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-amber-600"></i> 회송 내역 관리
+        <span id="returnTabCountBadge" class="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded-full text-[10px] font-extrabold">0</span>
       </button>
     </div>
 
@@ -170,7 +167,7 @@
       </div>
       <div class="relative w-full sm:w-60">
         <i data-lucide="search" class="w-3.5 h-3.5 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
-        <input type="text" id="searchInput" oninput="renderAll()" placeholder="상품명, 코드, 날짜, 메모 검색..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500">
+        <input type="text" id="searchInput" oninput="renderAll()" placeholder="상품명, 코드, 날짜, 사유 검색..." class="w-full pl-8 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500">
       </div>
     </div>
   </div>
@@ -184,6 +181,106 @@
   <!-- 뷰 2: 품목별 누적 통계 & 순위 컨테이너 -->
   <section id="analyticsViewContainer" class="hidden space-y-5"></section>
 
+  <!-- 뷰 3: 회송 내역 관리 (수기 등록 & 이력 목록) 컨테이너 -->
+  <section id="returnsViewContainer" class="hidden space-y-4">
+    <!-- 회송 요약 카드 (사유별 집계) -->
+    <div class="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-7 gap-2.5">
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-sm">
+        <div class="text-[11px] font-medium text-slate-400">총 회송 건수</div>
+        <div class="text-lg font-bold text-slate-800 mt-0.5" id="retStatCount">0건</div>
+      </div>
+      <div class="bg-white p-3.5 rounded-xl border border-slate-200/80 shadow-sm">
+        <div class="text-[11px] font-medium text-slate-400">누적 회송 운임료</div>
+        <div class="text-lg font-bold text-rose-600 mt-0.5" id="retStatCost">0원</div>
+      </div>
+      <div class="bg-rose-50/60 p-3.5 rounded-xl border border-rose-200/60">
+        <div class="text-[11px] font-semibold text-rose-700">소비기한 오류</div>
+        <div class="text-lg font-bold text-rose-800 mt-0.5" id="retStatReason1">0건</div>
+      </div>
+      <div class="bg-amber-50/60 p-3.5 rounded-xl border border-amber-200/60">
+        <div class="text-[11px] font-semibold text-amber-700">외박스 파손</div>
+        <div class="text-lg font-bold text-amber-800 mt-0.5" id="retStatReason2">0건</div>
+      </div>
+      <div class="bg-orange-50/60 p-3.5 rounded-xl border border-orange-200/60">
+        <div class="text-[11px] font-semibold text-orange-700">파레트 적재 불량</div>
+        <div class="text-lg font-bold text-orange-800 mt-0.5" id="retStatReason3">0건</div>
+      </div>
+      <div class="bg-purple-50/60 p-3.5 rounded-xl border border-purple-200/60">
+        <div class="text-[11px] font-semibold text-purple-700">입고 시간 미준수</div>
+        <div class="text-lg font-bold text-purple-800 mt-0.5" id="retStatReason4">0건</div>
+      </div>
+      <div class="bg-slate-100/80 p-3.5 rounded-xl border border-slate-200/80">
+        <div class="text-[11px] font-semibold text-slate-600">기타 사유</div>
+        <div class="text-lg font-bold text-slate-800 mt-0.5" id="retStatReason5">0건</div>
+      </div>
+    </div>
+
+    <!-- 회송 수기 등록 폼 -->
+    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm no-print">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-3.5">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+            <span class="w-2 h-2 rounded-full bg-amber-500"></span> 회송 내역 수기 등록
+          </h3>
+          <p class="text-[11px] text-slate-500 mt-0.5">입고 진행 기사에게 지불한 회송 운임료와 회송 사유를 기록하면 클라우드에 즉시 동기화됩니다.</p>
+        </div>
+        <!-- 사유 빠른 선택 버튼 -->
+        <div class="flex flex-wrap items-center gap-1">
+          <span class="text-[11px] text-slate-400 mr-1">사유 빠른선택:</span>
+          <button type="button" onclick="selectReturnReason('소비기한 오류')" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-rose-50 text-rose-700 border border-rose-200 hover:bg-rose-100 transition">소비기한 오류</button>
+          <button type="button" onclick="selectReturnReason('외박스 파손')" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-amber-50 text-amber-700 border border-amber-200 hover:bg-amber-100 transition">외박스 파손</button>
+          <button type="button" onclick="selectReturnReason('파레트 적재 불량')" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-orange-50 text-orange-700 border border-orange-200 hover:bg-orange-100 transition">파레트 적재 불량</button>
+          <button type="button" onclick="selectReturnReason('입고 시간 미준수')" class="px-2 py-1 rounded-md text-[11px] font-semibold bg-purple-50 text-purple-700 border border-purple-200 hover:bg-purple-100 transition">입고 시간 미준수</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-12 gap-2.5 items-end">
+        <div class="lg:col-span-2">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">회송일자</label>
+          <input type="date" id="retInputDate" class="block w-full h-9 text-xs px-2.5 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-blue-500">
+        </div>
+        <div class="lg:col-span-2">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">회송 사유</label>
+          <select id="retInputReason" class="block w-full h-9 text-xs px-2.5 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-blue-500 font-medium">
+            <option value="소비기한 오류">소비기한 오류</option>
+            <option value="외박스 파손">외박스 파손</option>
+            <option value="파레트 적재 불량">파레트 적재 불량</option>
+            <option value="입고 시간 미준수">입고 시간 미준수</option>
+            <option value="기타 사유">기타 사유</option>
+          </select>
+        </div>
+        <div class="lg:col-span-2">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">담당 기사</label>
+          <input type="text" id="retInputDriver" value="김민겸 기사" placeholder="김민겸 기사" class="block w-full h-9 text-xs px-2.5 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-blue-500">
+        </div>
+        <div class="lg:col-span-2">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">회송 운임료 (원)</label>
+          <input type="number" id="retInputCost" value="250000" step="10000" placeholder="250000" class="block w-full h-9 text-xs px-2.5 rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-blue-500 font-semibold text-rose-600">
+        </div>
+        <div class="lg:col-span-3">
+          <label class="block text-[11px] font-semibold text-slate-600 mb-1">상세 내용 / 대상 품목 (Enter로 줄바꿈 가능)</label>
+          <textarea id="retInputNote" rows="1" oninput="this.style.height='36px';this.style.height=Math.max(36,this.scrollHeight)+'px'" placeholder="예: 크로와상 생지 2box 외박스 파손" class="block w-full h-9 min-h-[36px] text-xs px-2.5 py-[8px] rounded-lg border border-slate-200 bg-slate-50/50 focus:bg-white focus:outline-none focus:border-blue-500 resize-none leading-[18px] overflow-hidden"></textarea>
+        </div>
+        <div class="lg:col-span-1">
+          <button type="button" onclick="addReturnRecord()" class="w-full h-9 px-3 bg-slate-900 hover:bg-blue-600 text-white font-bold text-xs rounded-lg transition shadow-sm flex items-center justify-center gap-1">
+            <i data-lucide="plus" class="w-3.5 h-3.5"></i> 등록
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 회송 내역 목록 테이블 -->
+    <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+      <div class="p-4 sm:px-5 border-b border-slate-100 flex items-center justify-between bg-slate-50/60">
+        <div class="flex items-center gap-2">
+          <h3 class="text-sm font-bold text-slate-900">📋 회송 이력 및 운임 정산 내역</h3>
+          <span class="text-[11px] text-slate-400">(항목 클릭 시 내용을 즉시 수정하거나 삭제할 수 있습니다)</span>
+        </div>
+      </div>
+      <div class="p-3.5 sm:px-5 overflow-x-auto" id="returnsTableWrapper"></div>
+    </div>
+  </section>
+
   <!-- 필드 수정 모달 (인라인 에디터 + 내용 삭제 버튼 포함) -->
   <div id="editFieldModal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200">
@@ -191,7 +288,8 @@
         <h3 id="editModalTitle" class="text-sm font-bold text-slate-900">항목 수정</h3>
         <button onclick="closeEditModal()" class="text-slate-400 hover:text-slate-600"><i data-lucide="x" class="w-4 h-4"></i></button>
       </div>
-      <input type="text" id="editModalInput" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 mb-4" placeholder="내용을 입력하세요..." onkeydown="if(event.key==='Enter') saveEditModal()">
+      <textarea id="editModalInput" rows="4" class="w-full text-xs p-2.5 rounded-lg border border-slate-300 focus:outline-none focus:border-blue-600 mb-1 resize-y leading-relaxed" placeholder="내용을 입력하세요... (Enter로 줄바꿈 가능)"></textarea>
+      <p class="text-[11px] text-slate-400 mb-3">💡 Enter 키로 줄바꿈을 넣을 수 있습니다.</p>
       <div class="flex items-center justify-between gap-2 pt-1">
         <button onclick="clearEditField()" class="flex items-center gap-1 px-3 py-1.5 text-xs font-semibold text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition">
           <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 내용 삭제
@@ -280,7 +378,8 @@
     // =========================================================================
 
     // 로컬 스토리지 키 정의
-    const STORAGE_KEY = 'ms_inbound_records_v3_3';
+    const STORAGE_KEY = 'ms_inbound_records_v3_5';
+    const RETURNS_STORAGE_KEY = 'ms_return_records_v3_5';
     const CLOUD_URL_KEY = 'ms_inbound_cloud_url_v3';
 
     // 11월 4일 및 10월 엠즈 입고 내역 실제 데이터 11건 기본 탑재
@@ -299,6 +398,7 @@
     ];
 
     let records = [];
+    let returnRecords = [];
     let currentFilter = 'ALL';
     let currentMainView = 'DAILY';
     let collapsedMap = {};
@@ -311,6 +411,9 @@
 
     window.addEventListener('DOMContentLoaded', () => {
       lucide.createIcons();
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const retDateEl = document.getElementById('retInputDate');
+      if (retDateEl) retDateEl.value = todayStr;
       loadFromStorage();
       setupDragAndDrop();
       checkCloudBadge();
@@ -339,23 +442,24 @@
       currentMainView = view;
       const btnDaily = document.getElementById('tabBtnDaily');
       const btnAnalytics = document.getElementById('tabBtnAnalytics');
+      const btnReturns = document.getElementById('tabBtnReturns');
       const dailyContainer = document.getElementById('dailyViewContainer');
       const analyticsContainer = document.getElementById('analyticsViewContainer');
+      const returnsContainer = document.getElementById('returnsViewContainer');
       const accordionControls = document.getElementById('accordionControls');
 
-      if (view === 'DAILY') {
-        btnDaily.className = 'flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
-        btnAnalytics.className = 'flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition';
-        dailyContainer.classList.remove('hidden');
-        analyticsContainer.classList.add('hidden');
-        accordionControls.classList.remove('hidden');
-      } else {
-        btnAnalytics.className = 'flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
-        btnDaily.className = 'flex items-center gap-1.5 px-4 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition';
-        analyticsContainer.classList.remove('hidden');
-        dailyContainer.classList.add('hidden');
-        accordionControls.classList.add('hidden');
-      }
+      const activeClass = 'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
+      const inactiveClass = 'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition';
+
+      btnDaily.className = view === 'DAILY' ? activeClass : inactiveClass;
+      btnAnalytics.className = view === 'ANALYTICS' ? activeClass : inactiveClass;
+      btnReturns.className = view === 'RETURNS' ? activeClass : inactiveClass;
+
+      dailyContainer.classList.toggle('hidden', view !== 'DAILY');
+      analyticsContainer.classList.toggle('hidden', view !== 'ANALYTICS');
+      returnsContainer.classList.toggle('hidden', view !== 'RETURNS');
+      accordionControls.classList.toggle('hidden', view !== 'DAILY');
+
       renderAll();
     }
 
@@ -490,7 +594,7 @@
         return;
       }
 
-      const type = document.getElementById('defaultType').value;
+      const type = '입고';
       const status = document.getElementById('defaultStatus').value;
       const driver = document.getElementById('defaultDriver').value;
       const cost = parseInt(document.getElementById('defaultCost').value, 10) || 250000;
@@ -510,7 +614,7 @@
           center: grp.center,
           type: type,
           status: status,
-          title: `${type === '입고' ? '정기 입고' : '회송'} (${totalBoxes}box)`,
+          title: `정기 입고 (${totalBoxes}box)`,
           driver: driver,
           cost: cost,
           memo: '',
@@ -545,12 +649,20 @@
       renderStats();
       renderTop5Widget();
       renderDateTabs();
+      updateReturnTabBadge();
       if (currentMainView === 'DAILY') {
         renderRecords();
-      } else {
+      } else if (currentMainView === 'ANALYTICS') {
         renderAnalytics();
+      } else if (currentMainView === 'RETURNS') {
+        renderReturnsView();
       }
       lucide.createIcons();
+    }
+
+    function updateReturnTabBadge() {
+      const badge = document.getElementById('returnTabCountBadge');
+      if (badge) badge.textContent = returnRecords.length;
     }
 
     // 상단 TOP 5 간략 가로 막대그래프 위젯 렌더링 (pk 기준)
@@ -612,12 +724,15 @@
 
     function renderStats() {
       const filtered = getFilteredRecords();
+      const filteredReturns = getFilteredReturns();
       const count = filtered.length;
       const doneCount = filtered.filter(r => r.status === '입고 완료').length;
       const planCount = count - doneCount;
       const boxes = filtered.reduce((acc, r) => acc + (r.totalBoxes || 0), 0);
       const pks = filtered.reduce((acc, r) => acc + (r.totalPks || 0), 0);
-      const cost = filtered.reduce((acc, r) => acc + (r.cost || 0), 0);
+      const inboundCost = filtered.reduce((acc, r) => acc + (r.cost || 0), 0);
+      const returnCost = filteredReturns.reduce((acc, r) => acc + (r.cost || 0), 0);
+      const totalCost = inboundCost + returnCost;
 
       const itemMap = new Map();
       filtered.forEach(r => {
@@ -640,15 +755,23 @@
       document.getElementById('statAvgPks').textContent = `일평균 ${count ? Math.round(pks / count).toLocaleString() : 0} pk`;
       document.getElementById('statUniqueItems').textContent = `${itemMap.size}종`;
       document.getElementById('statTopItem').textContent = maxPk > 0 ? `최다: ${topItemName.slice(0, 12)}.. (${maxPk.toLocaleString()}pk)` : '-';
-      document.getElementById('statCost').textContent = `${cost.toLocaleString()}원`;
+      document.getElementById('statCost').textContent = `${totalCost.toLocaleString()}원`;
+      const breakdownEl = document.getElementById('statCostBreakdown');
+      if (breakdownEl) {
+        breakdownEl.textContent = `입고 ${inboundCost.toLocaleString()}원 / 회송 ${returnCost.toLocaleString()}원 (${filteredReturns.length}건)`;
+      }
     }
 
     function renderDateTabs() {
-      const months = Array.from(new Set(records.map(r => r.date.slice(0, 7)))).sort().reverse();
-      const dates = records.map(r => r.date).sort().reverse();
+      const allDates = [
+        ...records.map(r => r.date),
+        ...returnRecords.map(r => r.date)
+      ];
+      const months = Array.from(new Set(allDates.map(d => d.slice(0, 7)))).sort().reverse();
+      const dates = Array.from(new Set(records.map(r => r.date))).sort().reverse();
       const container = document.getElementById('dateTabs');
 
-      let html = `<button onclick="setFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${currentFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">전체 (${records.length}건)</button>`;
+      let html = `<button onclick="setFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${currentFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">전체 보기</button>`;
 
       months.forEach(m => {
         const [y, mm] = m.split('-');
@@ -656,11 +779,13 @@
         html += `<button onclick="setFilter('${m}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${active ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">${y}년 ${parseInt(mm, 10)}월</button>`;
       });
 
-      dates.forEach(d => {
-        const shortD = d.slice(5).replace('-', '/');
-        const active = currentFilter === d;
-        html += `<button onclick="setFilter('${d}')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${active ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${shortD}</button>`;
-      });
+      if (currentMainView !== 'RETURNS') {
+        dates.forEach(d => {
+          const shortD = d.slice(5).replace('-', '/');
+          const active = currentFilter === d;
+          html += `<button onclick="setFilter('${d}')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${active ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${shortD}</button>`;
+        });
+      }
 
       container.innerHTML = html;
     }
@@ -675,6 +800,15 @@
       return records.filter(r => {
         const matchFilter = currentFilter === 'ALL' || r.date.startsWith(currentFilter);
         const matchQuery = !q || r.date.includes(q) || r.title.toLowerCase().includes(q) || r.driver.toLowerCase().includes(q) || (r.memo && r.memo.toLowerCase().includes(q)) || r.items.some(i => i.name.toLowerCase().includes(q) || (i.code && i.code.includes(q)));
+        return matchFilter && matchQuery;
+      });
+    }
+
+    function getFilteredReturns() {
+      const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+      return returnRecords.filter(r => {
+        const matchFilter = currentFilter === 'ALL' || r.date.startsWith(currentFilter);
+        const matchQuery = !q || r.date.includes(q) || r.reason.toLowerCase().includes(q) || r.driver.toLowerCase().includes(q) || (r.note && r.note.toLowerCase().includes(q));
         return matchFilter && matchQuery;
       });
     }
@@ -698,14 +832,16 @@
       showToast(`${rec.date} 상태가 '${rec.status}'(으)로 변경되었습니다.`);
     }
 
-    // 인라인 수정 모달 제어
-    function editRecordField(id, field, label) {
-      const rec = records.find(r => r.id === id);
+    // 인라인 수정 모달 제어 (입고 내역 & 회송 내역 공용)
+    function editRecordField(id, field, label, isReturn = false) {
+      const targetList = isReturn ? returnRecords : records;
+      const rec = targetList.find(r => r.id === id);
       if (!rec) return;
-      editingTarget = { id, field, label };
+      editingTarget = { id, field, label, isReturn };
       document.getElementById('editModalTitle').textContent = `${rec.date} [${label}] 수정`;
       const input = document.getElementById('editModalInput');
       input.value = rec[field] !== undefined ? rec[field] : '';
+      input.rows = (field === 'note' || field === 'memo') ? 4 : 2;
       const modal = document.getElementById('editFieldModal');
       modal.classList.remove('hidden');
       modal.classList.add('flex');
@@ -722,8 +858,9 @@
 
     function clearEditField() {
       if (!editingTarget) return;
-      const { id, field } = editingTarget;
-      const rec = records.find(r => r.id === id);
+      const { id, field, isReturn } = editingTarget;
+      const targetList = isReturn ? returnRecords : records;
+      const rec = targetList.find(r => r.id === id);
       if (rec) {
         if (field === 'cost') {
           rec.cost = 0;
@@ -739,8 +876,9 @@
 
     function saveEditModal() {
       if (!editingTarget) return;
-      const { id, field, label } = editingTarget;
-      const rec = records.find(r => r.id === id);
+      const { id, field, label, isReturn } = editingTarget;
+      const targetList = isReturn ? returnRecords : records;
+      const rec = targetList.find(r => r.id === id);
       if (rec) {
         const val = document.getElementById('editModalInput').value;
         if (field === 'cost') {
@@ -753,6 +891,134 @@
         showToast(`${label} 항목이 업데이트되었습니다.`);
       }
       closeEditModal();
+    }
+
+    // 회송 내역 관리 전용 함수들
+    function selectReturnReason(reason) {
+      const sel = document.getElementById('retInputReason');
+      if (sel) sel.value = reason;
+    }
+
+    function getReasonBadgeClass(reason) {
+      if (reason.includes('소비기한')) return 'bg-rose-100 text-rose-700 border border-rose-200';
+      if (reason.includes('외박스')) return 'bg-amber-100 text-amber-800 border border-amber-200';
+      if (reason.includes('파레트')) return 'bg-orange-100 text-orange-800 border border-orange-200';
+      if (reason.includes('입고 시간')) return 'bg-purple-100 text-purple-700 border border-purple-200';
+      return 'bg-slate-100 text-slate-700 border border-slate-200';
+    }
+
+    function addReturnRecord() {
+      const dateVal = document.getElementById('retInputDate').value || new Date().toISOString().slice(0, 10);
+      const reasonVal = document.getElementById('retInputReason').value || '소비기한 오류';
+      const driverVal = document.getElementById('retInputDriver').value.trim() || '김민겸 기사';
+      const costVal = parseInt(document.getElementById('retInputCost').value, 10) || 0;
+      const noteVal = document.getElementById('retInputNote').value.trim();
+
+      const newRet = {
+        id: 'ret_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6),
+        date: dateVal,
+        reason: reasonVal,
+        driver: driverVal,
+        cost: costVal,
+        note: noteVal
+      };
+
+      returnRecords.unshift(newRet);
+      returnRecords.sort((a, b) => b.date.localeCompare(a.date));
+      const noteEl = document.getElementById('retInputNote');
+      noteEl.value = '';
+      noteEl.style.height = '36px';
+      saveToStorage();
+      renderAll();
+      showToast(`${dateVal} [${reasonVal}] 회송 내역이 등록되었습니다.`);
+    }
+
+    function requestDeleteReturn(id, dateStr, reasonStr) {
+      openConfirmModal(`${dateStr} [${reasonStr}] 회송 내역을 삭제하시겠습니까?`, () => {
+        returnRecords = returnRecords.filter(r => r.id !== id);
+        saveToStorage();
+        renderAll();
+        showToast('회송 내역이 삭제되었습니다.');
+      });
+    }
+
+    function renderReturnsView() {
+      const filtered = getFilteredReturns();
+      const totalCost = filtered.reduce((acc, r) => acc + (r.cost || 0), 0);
+
+      const c1 = filtered.filter(r => r.reason.includes('소비기한')).length;
+      const c2 = filtered.filter(r => r.reason.includes('외박스')).length;
+      const c3 = filtered.filter(r => r.reason.includes('파레트')).length;
+      const c4 = filtered.filter(r => r.reason.includes('입고 시간')).length;
+      const c5 = filtered.length - (c1 + c2 + c3 + c4);
+
+      document.getElementById('retStatCount').textContent = `${filtered.length}건`;
+      document.getElementById('retStatCost').textContent = `${totalCost.toLocaleString()}원`;
+      document.getElementById('retStatReason1').textContent = `${c1}건`;
+      document.getElementById('retStatReason2').textContent = `${c2}건`;
+      document.getElementById('retStatReason3').textContent = `${c3}건`;
+      document.getElementById('retStatReason4').textContent = `${c4}건`;
+      const r5El = document.getElementById('retStatReason5');
+      if (r5El) r5El.textContent = `${c5}건`;
+
+      const wrapper = document.getElementById('returnsTableWrapper');
+      if (filtered.length === 0) {
+        wrapper.innerHTML = `
+          <div class="py-12 text-center text-slate-400 text-xs">
+            등록된 회송 내역이 없습니다. 위 입력창에서 회송 사유(소비기한 오류, 외박스 파손 등)와 운임료를 입력해 등록해 보세요!
+          </div>`;
+        return;
+      }
+
+      wrapper.innerHTML = `
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-400">
+              <th class="py-2 w-12">No.</th>
+              <th class="py-2 w-28">회송일자</th>
+              <th class="py-2 w-36">회송 사유</th>
+              <th class="py-2">상세 내용 / 대상 품목 (클릭 시 수정)</th>
+              <th class="py-2 w-28">담당 기사</th>
+              <th class="py-2 text-right w-32">회송 운임료</th>
+              <th class="py-2 text-center w-16 no-print">삭제</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${filtered.map((ret, idx) => `
+              <tr class="hover:bg-slate-50/80">
+                <td class="py-2.5 text-slate-400 font-medium">${idx + 1}</td>
+                <td class="py-2.5 font-bold text-slate-800">${ret.date}</td>
+                <td class="py-2.5">
+                  <span onclick="editRecordField('${ret.id}', 'reason', '회송 사유', true)" class="px-2 py-0.5 rounded-md text-[11px] font-semibold cursor-pointer ${getReasonBadgeClass(ret.reason)}" title="클릭하여 사유 수정">
+                    ${ret.reason} ✎
+                  </span>
+                </td>
+                <td class="py-2.5 font-medium text-slate-700 cursor-pointer hover:text-blue-600 whitespace-pre-line leading-relaxed" onclick="editRecordField('${ret.id}', 'note', '회송 상세 내용', true)">
+                  ${ret.note ? escapeHtml(ret.note) : `<span class="text-slate-300 underline">+ 상세 내용 입력</span>`}
+                </td>
+                <td class="py-2.5 text-slate-600 cursor-pointer hover:text-blue-600" onclick="editRecordField('${ret.id}', 'driver', '담당 기사', true)">
+                  🚚 <b>${ret.driver}</b> ✎
+                </td>
+                <td class="py-2.5 text-right font-bold text-rose-600 cursor-pointer hover:underline" onclick="editRecordField('${ret.id}', 'cost', '회송 운임료', true)">
+                  ${(ret.cost || 0).toLocaleString()}원 ✎
+                </td>
+                <td class="py-2.5 text-center no-print">
+                  <button onclick="requestDeleteReturn('${ret.id}', '${ret.date}', '${escapeQuotes(ret.reason)}')" class="text-slate-400 hover:text-rose-600 p-1 rounded">
+                    <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                  </button>
+                </td>
+              </tr>
+            `).join('')}
+          </tbody>
+          <tfoot>
+            <tr class="border-t-2 border-slate-200 bg-slate-50/60 font-bold text-slate-800">
+              <td colspan="5" class="py-2.5 pl-2">회송 합계 (총 ${filtered.length}건)</td>
+              <td class="py-2.5 text-right text-rose-600">${totalCost.toLocaleString()}원</td>
+              <td class="no-print"></td>
+            </tr>
+          </tfoot>
+        </table>
+      `;
     }
 
     // 커스텀 확인 모달 제어
@@ -958,10 +1224,11 @@
       `;
     }
 
-    // 월말 정산용 3-시트 엑셀(.xlsx) 자동 생성 및 다운로드
+    // 월말 정산용 4-시트 엑셀(.xlsx) 자동 생성 및 다운로드 (회송 내역 시트 포함)
     function downloadSettlementExcel() {
       const filtered = getFilteredRecords();
-      if (filtered.length === 0) {
+      const filteredReturns = getFilteredReturns();
+      if (filtered.length === 0 && filteredReturns.length === 0) {
         showToast('다운로드할 내역이 없습니다.');
         return;
       }
@@ -983,7 +1250,7 @@
         '비고(메모)': r.memo || ''
       }));
       const wsDaily = XLSX.utils.json_to_sheet(dailyRows);
-      XLSX.utils.book_append_sheet(wb, wsDaily, '1_일자별_정산요약');
+      XLSX.utils.book_append_sheet(wb, wsDaily, '1_일자별_입고정산');
 
       const itemMap = new Map();
       filtered.forEach(r => {
@@ -1018,18 +1285,27 @@
             '상품명': it.name,
             '입수': it.ipsu,
             '발주(box)': it.box,
-            '환산(pk)': it.pk,
-            '노션_품목텍스트': `${idx + 1}. ${it.name}`,
-            '노션_확인내용': `${it.pk}pk`
+            '환산(pk)': it.pk
           });
         });
       });
       const wsDetail = XLSX.utils.json_to_sheet(detailRows);
       XLSX.utils.book_append_sheet(wb, wsDetail, '3_상세입고내역');
 
+      const returnRows = filteredReturns.map((ret, idx) => ({
+        'No': idx + 1,
+        '회송일자': ret.date,
+        '회송사유': ret.reason,
+        '상세내용/대상품목': ret.note || '',
+        '담당기사': ret.driver,
+        '회송운임료(원)': ret.cost || 0
+      }));
+      const wsReturns = XLSX.utils.json_to_sheet(returnRows.length ? returnRows : [{'안내': '등록된 회송 내역이 없습니다.'}]);
+      XLSX.utils.book_append_sheet(wb, wsReturns, '4_회송내역_운임정산');
+
       const fileLabel = currentFilter === 'ALL' ? '전체' : currentFilter;
-      XLSX.writeFile(wb, `엠즈_입고정산보고서_${fileLabel}.xlsx`);
-      showToast('정산용 엑셀 파일(3개 시트)이 다운로드되었습니다!');
+      XLSX.writeFile(wb, `엠즈_입고및회송_정산보고서_${fileLabel}.xlsx`);
+      showToast('입고 및 회송 정산용 엑셀 파일(4개 시트)이 다운로드되었습니다!');
     }
 
     // 아이프레임 및 캔버스 호환 클립보드 복사
@@ -1059,6 +1335,14 @@
       return String(str).replace(/'/g, "\\'");
     }
 
+    function escapeHtml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;');
+    }
+
     function requestDeleteRecord(id, dateStr) {
       openConfirmModal(`${dateStr} 입고 내역을 삭제하시겠습니까?`, () => {
         records = records.filter(r => r.id !== id);
@@ -1078,6 +1362,7 @@
 
     function executeClearAll() {
       records = [];
+      returnRecords = [];
       saveToStorage();
       renderAll();
       showToast('모든 내역이 초기화되었습니다.');
@@ -1085,6 +1370,7 @@
 
     function saveToStorage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+      localStorage.setItem(RETURNS_STORAGE_KEY, JSON.stringify(returnRecords));
       pushToCloud(true);
     }
 
@@ -1100,6 +1386,18 @@
       } else {
         records = JSON.parse(JSON.stringify(OCT_DEFAULT_DATA));
       }
+
+      const savedReturns = localStorage.getItem(RETURNS_STORAGE_KEY);
+      if (savedReturns) {
+        try {
+          returnRecords = JSON.parse(savedReturns) || [];
+        } catch (e) {
+          returnRecords = [];
+        }
+      } else {
+        returnRecords = [];
+      }
+
       renderAll();
       if (getActiveCloudUrl()) pullFromCloud(true);
     }
@@ -1170,14 +1468,19 @@ function doPost(e) {
       try {
         const badge = document.getElementById('cloudBadge');
         if (badge) badge.textContent = '⏳ 클라우드 저장 중...';
+        const payload = {
+          records: records,
+          returns: returnRecords,
+          updatedAt: new Date().toISOString()
+        };
         await fetch(url, {
           method: 'POST',
           mode: 'no-cors',
           headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-          body: JSON.stringify(records)
+          body: JSON.stringify(payload)
         });
         checkCloudBadge();
-        if (!silent) showToast('클라우드 서버에 현재 데이터가 안전하게 저장되었습니다!');
+        if (!silent) showToast('클라우드 서버에 입고 및 회송 데이터가 안전하게 저장되었습니다!');
       } catch (e) {
         console.warn('Cloud push error:', e);
         if (!silent) showToast('클라우드 업로드 중 오류가 발생했습니다.');
@@ -1193,18 +1496,42 @@ function doPost(e) {
       try {
         const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
         const data = await res.json();
-        if (Array.isArray(data) && data.length > 0) {
-          records = data;
-          localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
-          renderAll();
-          checkCloudBadge();
-          if (!silent) showToast(`클라우드에서 ${records.length}건의 최신 데이터를 불러왔습니다!`);
-        } else {
-          // 클라우드 시트가 처음이라 비어있는 경우, 현재 보유 중인 데이터를 자동으로 서버에 초기 업로드합니다.
-          if (records && records.length > 0) {
+        if (Array.isArray(data)) {
+          // 구버전 배열 형태 데이터 호환 처리 (로컬에 회송 내역이 있으면 유지하며 서버를 최신 포맷으로 업그레이드)
+          if (data.length > 0) {
+            records = data;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+            renderAll();
+            checkCloudBadge();
+            if (returnRecords && returnRecords.length > 0) {
+              pushToCloud(true);
+            }
+            if (!silent) showToast(`클라우드에서 ${records.length}건의 최신 데이터를 불러왔습니다!`);
+          } else if ((records && records.length > 0) || (returnRecords && returnRecords.length > 0)) {
             pushToCloud(true);
           }
-          if (!silent) showToast('클라우드 서버에 초기 데이터를 자동으로 동기화했습니다!');
+        } else if (data && typeof data === 'object') {
+          // 신규 객체 형태 ({ records, returns }) 호환 처리
+          const hasCloudRecords = Array.isArray(data.records) && data.records.length > 0;
+          const hasCloudReturns = Array.isArray(data.returns) && data.returns.length > 0;
+
+          if (hasCloudRecords) {
+            records = data.records;
+            localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+          }
+          if (Array.isArray(data.returns)) {
+            returnRecords = data.returns;
+            localStorage.setItem(RETURNS_STORAGE_KEY, JSON.stringify(returnRecords));
+          }
+
+          // 클라우드가 완전히 비어있는데 로컬에 데이터가 있다면 클라우드로 초기 업로드
+          if (!hasCloudRecords && !hasCloudReturns && (records.length > 0 || returnRecords.length > 0)) {
+            pushToCloud(true);
+          }
+
+          renderAll();
+          checkCloudBadge();
+          if (!silent) showToast(`클라우드 동기화 완료! (입고 ${records.length}건 / 회송 ${returnRecords.length}건)`);
         }
       } catch (e) {
         if (!silent) showToast('클라우드 데이터를 불러오지 못했습니다. URL과 권한(모든 사용자)을 확인해 주세요.');
@@ -1212,11 +1539,16 @@ function doPost(e) {
     }
 
     function exportData() {
-      const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+      const payload = {
+        records: records,
+        returns: returnRecords,
+        exportedAt: new Date().toISOString()
+      };
+      const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a');
       a.href = url;
-      a.download = `엠즈_입고이력_백업_${new Date().toISOString().slice(0,10)}.json`;
+      a.download = `엠즈_입고및회송_백업_${new Date().toISOString().slice(0,10)}.json`;
       a.click();
     }
 
@@ -1232,6 +1564,12 @@ function doPost(e) {
             saveToStorage();
             renderAll();
             showToast('데이터를 성공적으로 불러왔습니다.');
+          } else if (imported && typeof imported === 'object') {
+            if (Array.isArray(imported.records)) records = imported.records;
+            if (Array.isArray(imported.returns)) returnRecords = imported.returns;
+            saveToStorage();
+            renderAll();
+            showToast('입고 및 회송 데이터를 성공적으로 불러왔습니다.');
           }
         } catch (err) {
           showToast('올바른 JSON 파일이 아닙니다.');
