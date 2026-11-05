@@ -1,0 +1,513 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>엠즈 입고 및 회송 대시보드</title>
+  <!-- Tailwind CSS & SheetJS & Lucide Icons -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
+  <script src="https://unpkg.com/lucide@latest"></script>
+  <style>
+    @import url('https://cdn.jsdelivr.net/gh/orioncactus/pretendard/dist/web/static/pretendard.css');
+    body { font-family: 'Pretendard', sans-serif; background-color: #f8fafc; color: #1e293b; }
+    .drop-active { border-color: #2563eb !important; background-color: #eff6ff !important; }
+    ::-webkit-scrollbar { width: 6px; height: 6px; }
+    ::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 3px; }
+  </style>
+</head>
+<body class="p-4 md:p-6 max-w-6xl mx-auto">
+
+  <!-- 상단 헤더 & 요약 배너 -->
+  <header class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-6 bg-white p-5 rounded-2xl shadow-sm border border-slate-200/80">
+    <div>
+      <div class="flex items-center gap-2.5">
+        <span class="text-2xl">🚚</span>
+        <h1 class="text-xl font-bold text-slate-900">엠즈 입고 및 회송 대시보드</h1>
+        <span class="text-xs font-semibold px-2.5 py-1 bg-blue-50 text-blue-600 rounded-full">바로가 Factory</span>
+      </div>
+      <p class="text-xs text-slate-500 mt-1.5">
+        기본 입고 비용: 240,000원 + 10,000원(까데기) = <b>250,000원</b> | 엑셀 업로드 시 박스 수량 및 노션 양식 자동 변환
+      </p>
+    </div>
+    <div class="flex items-center gap-2">
+      <button onclick="exportData()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition">
+        <i data-lucide="download" class="w-3.5 h-3.5"></i> 데이터 백업
+      </button>
+      <label class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-slate-600 bg-slate-100 hover:bg-slate-200 rounded-lg transition cursor-pointer">
+        <i data-lucide="upload" class="w-3.5 h-3.5"></i> 백업 불러오기
+        <input type="file" id="jsonImport" accept=".json" class="hidden" onchange="importData(event)">
+      </label>
+      <button onclick="clearAllData()" class="flex items-center gap-1.5 px-3 py-2 text-xs font-medium text-rose-600 bg-rose-50 hover:bg-rose-100 rounded-lg transition">
+        <i data-lucide="trash-2" class="w-3.5 h-3.5"></i> 초기화
+      </button>
+    </div>
+  </header>
+
+  <!-- KPI 요약 카드 -->
+  <section class="grid grid-cols-2 md:grid-cols-4 gap-3.5 mb-6">
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">총 등록 건수</div>
+      <div class="text-2xl font-bold text-slate-800" id="statCount">0건</div>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">누적 입고 박스</div>
+      <div class="text-2xl font-bold text-blue-600" id="statBoxes">0 box</div>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">누적 입고 팩(pk)</div>
+      <div class="text-2xl font-bold text-emerald-600" id="statPks">0 pk</div>
+    </div>
+    <div class="bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm">
+      <div class="text-xs font-medium text-slate-400 mb-1">누적 운임 비용</div>
+      <div class="text-2xl font-bold text-slate-800" id="statCost">0원</div>
+    </div>
+  </section>
+
+  <!-- 엑셀 업로드 및 옵션 설정 영역 -->
+  <section class="bg-white p-5 rounded-2xl border border-slate-200/80 shadow-sm mb-6">
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 items-center">
+      <!-- 드래그 앤 드롭 박스 -->
+      <div id="dropZone" class="lg:col-span-2 border-2 border-dashed border-slate-300 rounded-xl p-6 text-center hover:border-blue-500 hover:bg-slate-50/60 transition cursor-pointer flex flex-col items-center justify-center min-h-[140px]" onclick="document.getElementById('excelInput').click()">
+        <input type="file" id="excelInput" accept=".xlsx, .xls, .csv" class="hidden" multiple onchange="handleFiles(this.files)">
+        <div class="w-10 h-10 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mb-2.5">
+          <i data-lucide="file-spreadsheet" class="w-5 h-5"></i>
+        </div>
+        <p class="text-sm font-semibold text-slate-700">여기에 엠즈 입고 내역 엑셀 파일을 끌어다 놓거나 클릭하여 업로드하세요</p>
+        <p class="text-xs text-slate-400 mt-1">품목명(*Npk/box 포함)과 수량(pk) 열을 자동으로 인식하여 박스 수를 계산합니다 (.xlsx, .xls, .csv)</p>
+      </div>
+
+      <!-- 기본값 설정 패널 -->
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/60 space-y-3">
+        <div class="text-xs font-bold text-slate-700 flex items-center gap-1.5">
+          <i data-lucide="settings-2" class="w-3.5 h-3.5 text-slate-500"></i> 업로드 기본값 설정
+        </div>
+        <div class="grid grid-cols-2 gap-2.5">
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">입고일자 (미지정시 오늘)</label>
+            <input type="date" id="defaultDate" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">구분</label>
+            <select id="defaultType" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+              <option value="입고">입고</option>
+              <option value="회송">회송</option>
+            </select>
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">화물 기사</label>
+            <input type="text" id="defaultDriver" value="김민겸 기사" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+          </div>
+          <div>
+            <label class="block text-[11px] text-slate-500 mb-1">입고 비용 (원)</label>
+            <input type="number" id="defaultCost" value="250000" step="10000" class="w-full text-xs p-2 rounded-lg border border-slate-200 bg-white">
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 필터 및 검색 바 -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
+    <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0" id="monthTabs">
+      <button onclick="setFilterMonth('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold bg-slate-900 text-white">전체 보기</button>
+    </div>
+    <div class="relative w-full sm:w-64">
+      <i data-lucide="search" class="w-4 h-4 text-slate-400 absolute left-3 top-1/2 -translate-y-1/2"></i>
+      <input type="text" id="searchInput" oninput="renderRecords()" placeholder="품목명, 날짜, 기사 검색..." class="w-full pl-9 pr-3 py-1.5 text-xs bg-white border border-slate-200 rounded-lg focus:outline-none focus:border-blue-500">
+    </div>
+  </div>
+
+  <!-- 입고 내역 리스트 영역 -->
+  <section id="recordsContainer" class="space-y-4"></section>
+
+  <!-- 토스트 알림 -->
+  <div id="toast" class="fixed bottom-5 right-5 bg-slate-900 text-white text-xs font-medium px-4 py-2.5 rounded-xl shadow-lg opacity-0 pointer-events-none transition-opacity duration-200 flex items-center gap-2">
+    <i data-lucide="check-circle-2" class="w-4 h-4 text-emerald-400"></i>
+    <span id="toastMsg">클립보드에 복사되었습니다.</span>
+  </div>
+
+  <script>
+    const STORAGE_KEY = 'ms_inbound_records_v1';
+    let records = [];
+    let currentMonthFilter = 'ALL';
+
+    // 초기화
+    window.addEventListener('DOMContentLoaded', () => {
+      lucide.createIcons();
+      document.getElementById('defaultDate').value = new Date().toISOString().slice(0, 10);
+      loadFromStorage();
+      setupDragAndDrop();
+    });
+
+    function setupDragAndDrop() {
+      const dropZone = document.getElementById('dropZone');
+      ['dragenter', 'dragover'].forEach(evt => {
+        dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.add('drop-active'); });
+      });
+      ['dragleave', 'drop'].forEach(evt => {
+        dropZone.addEventListener(evt, e => { e.preventDefault(); dropZone.classList.remove('drop-active'); });
+      });
+      dropZone.addEventListener('drop', e => {
+        if (e.dataTransfer.files.length) handleFiles(e.dataTransfer.files);
+      });
+    }
+
+    function handleFiles(files) {
+      Array.from(files).forEach(file => {
+        const reader = new FileReader();
+        reader.onload = e => {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', cellDates: true });
+          const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(firstSheet, { header: 1, defval: '' });
+          parseExcelRows(rows, file.name);
+        };
+        reader.readAsArrayBuffer(file);
+      });
+      document.getElementById('excelInput').value = '';
+    }
+
+    // 스마트 엑셀 파서: 헤더 이름을 분석하거나 데이터 패턴으로 품목/수량/날짜 자동 감지
+    function parseExcelRows(rows, fileName) {
+      if (!rows || rows.length < 2) {
+        showToast('데이터가 비어있거나 형식을 읽을 수 없습니다.');
+        return;
+      }
+
+      let colItem = -1, colPk = -1, colDate = -1, colBox = -1;
+      let startRow = 0;
+
+      // 상단 10행 이내에서 헤더 탐색
+      for (let r = 0; r < Math.min(10, rows.length); r++) {
+        const rowStr = rows[r].map(c => String(c).trim());
+        rowStr.forEach((val, idx) => {
+          if (/품목|제품|상품|내역|품명|item/i.test(val) && !/코드|번호/.test(val)) colItem = idx;
+          if (/수량|팩|pk|입고량|출고량|확인/i.test(val) && colPk === -1) colPk = idx;
+          if (/일자|날짜|입고일|date/i.test(val) && colDate === -1) colDate = idx;
+          if (/박스|box/i.test(val) && colBox === -1) colBox = idx;
+        });
+        if (colItem !== -1) { startRow = r + 1; break; }
+      }
+
+      // 헤더를 못 찾았을 경우 데이터 패턴으로 열 추정
+      if (colItem === -1) {
+        startRow = 1;
+        const sample = rows[1] || rows[0];
+        sample.forEach((val, idx) => {
+          const s = String(val);
+          if (s.includes('pk/box') || s.includes('곤트란') || s.length > 8) colItem = idx;
+          else if (!isNaN(parseFloat(s)) && colPk === -1) colPk = idx;
+        });
+        if (colItem === -1) colItem = 0;
+        if (colPk === -1) colPk = 1;
+      }
+
+      let items = [];
+      let extractedDate = '';
+
+      // 파일명에서 날짜 추출 시도 (예: 2026-11-05 또는 261105)
+      const fnMatch = fileName.match(/(20\d{2})[-./년]?\s*(\d{1,2})[-./월]?\s*(\d{1,2})/);
+      if (fnMatch) {
+        extractedDate = `${fnMatch[1]}-${String(fnMatch[2]).padStart(2, '0')}-${String(fnMatch[3]).padStart(2, '0')}`;
+      }
+
+      for (let i = startRow; i < rows.length; i++) {
+        const row = rows[i];
+        if (!row || row.length === 0) continue;
+
+        const rawName = String(row[colItem] || '').trim();
+        if (!rawName || /합계|총계|소계|total/i.test(rawName)) continue;
+
+        const cleanName = rawName.replace(/^\d+\.\s*/, ''); // 앞번호 중복 제거
+        const rawPk = colPk !== -1 ? row[colPk] : '';
+        const pkCount = parseFloat(String(rawPk).replace(/[^0-9.]/g, '')) || 0;
+        if (pkCount <= 0) continue;
+
+        if (!extractedDate && colDate !== -1 && row[colDate]) {
+          extractedDate = normalizeDate(row[colDate]);
+        }
+
+        // 품목명 내 '*4pk/box' 규격 파싱하여 박스 환산
+        let boxCount = 0;
+        const specMatch = cleanName.match(/\*(\d+)pk\/box/i);
+        if (specMatch && specMatch[1]) {
+          boxCount = pkCount / parseInt(specMatch[1], 10);
+        } else if (colBox !== -1 && row[colBox]) {
+          boxCount = parseFloat(String(row[colBox]).replace(/[^0-9.]/g, '')) || 0;
+        }
+
+        items.push({
+          name: cleanName,
+          pk: pkCount,
+          box: Math.round(boxCount * 10) / 10
+        });
+      }
+
+      if (items.length === 0) {
+        showToast('유효한 입고 품목 행을 찾지 못했습니다.');
+        return;
+      }
+
+      const finalDate = extractedDate || document.getElementById('defaultDate').value;
+      const type = document.getElementById('defaultType').value;
+      const driver = document.getElementById('defaultDriver').value;
+      const cost = parseInt(document.getElementById('defaultCost').value, 10) || 250000;
+
+      const totalBoxes = Math.round(items.reduce((sum, item) => sum + item.box, 0));
+      const totalPks = items.reduce((sum, item) => sum + item.pk, 0);
+
+      const newRecord = {
+        id: 'rec_' + Date.now() + '_' + Math.random().toString(36).substring(2, 6),
+        date: finalDate,
+        type: type,
+        status: '입고 완료',
+        title: `${type === '입고' ? '정기 입고' : '회송'} (${totalBoxes}box)`,
+        driver: driver,
+        cost: cost,
+        totalBoxes: totalBoxes,
+        totalPks: totalPks,
+        items: items
+      };
+
+      records.unshift(newRecord);
+      records.sort((a, b) => b.date.localeCompare(a.date));
+      saveToStorage();
+      renderAll();
+      showToast(`엑셀 파싱 완료! (${items.length}개 품목 / 총 ${totalBoxes}box)`);
+    }
+
+    function normalizeDate(val) {
+      if (val instanceof Date) {
+        return val.toISOString().slice(0, 10);
+      }
+      const str = String(val).trim().replace(/[./년월]/g, '-').replace(/일/g, '');
+      const m = str.match(/(20\d{2})-(\d{1,2})-(\d{1,2})/);
+      if (m) return `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+      return '';
+    }
+
+    function renderAll() {
+      renderStats();
+      renderMonthTabs();
+      renderRecords();
+      lucide.createIcons();
+    }
+
+    function renderStats() {
+      const filtered = getFilteredRecords();
+      const count = filtered.length;
+      const boxes = filtered.reduce((acc, r) => acc + (r.totalBoxes || 0), 0);
+      const pks = filtered.reduce((acc, r) => acc + (r.totalPks || 0), 0);
+      const cost = filtered.reduce((acc, r) => acc + (r.cost || 0), 0);
+
+      document.getElementById('statCount').textContent = `${count}건`;
+      document.getElementById('statBoxes').textContent = `${boxes.toLocaleString()} box`;
+      document.getElementById('statPks').textContent = `${pks.toLocaleString()} pk`;
+      document.getElementById('statCost').textContent = `${cost.toLocaleString()}원`;
+    }
+
+    function renderMonthTabs() {
+      const months = Array.from(new Set(records.map(r => r.date.slice(0, 7)))).sort().reverse();
+      const container = document.getElementById('monthTabs');
+      let html = `<button onclick="setFilterMonth('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${currentMonthFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">전체 보기</button>`;
+      
+      months.forEach(m => {
+        const [y, mm] = m.split('-');
+        const active = currentMonthFilter === m;
+        html += `<button onclick="setFilterMonth('${m}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${active ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">${y}년 ${parseInt(mm, 10)}월</button>`;
+      });
+      container.innerHTML = html;
+    }
+
+    function setFilterMonth(m) {
+      currentMonthFilter = m;
+      renderAll();
+    }
+
+    function getFilteredRecords() {
+      const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+      return records.filter(r => {
+        const matchMonth = currentMonthFilter === 'ALL' || r.date.startsWith(currentMonthFilter);
+        const matchQuery = !q || r.date.includes(q) || r.title.toLowerCase().includes(q) || r.driver.toLowerCase().includes(q) || r.items.some(i => i.name.toLowerCase().includes(q));
+        return matchMonth && matchQuery;
+      });
+    }
+
+    function renderRecords() {
+      const container = document.getElementById('recordsContainer');
+      const filtered = getFilteredRecords();
+
+      if (filtered.length === 0) {
+        container.innerHTML = `
+          <div class="bg-white rounded-2xl border border-slate-200/80 p-10 text-center text-slate-400 text-xs">
+            표시할 입고 내역이 없습니다. 위 영역에 엑셀 파일을 업로드해 보세요!
+          </div>`;
+        return;
+      }
+
+      container.innerHTML = filtered.map(rec => {
+        const itemsCopyText = rec.items.map((it, idx) => `${idx + 1}. ${it.name}`).join('\n');
+        const pkCopyText = rec.items.map(it => `${it.pk}pk`).join('\n');
+
+        return `
+        <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden">
+          <!-- 카드 상단 바 -->
+          <div class="p-4 sm:px-5 border-b border-slate-100 flex flex-wrap items-center justify-between gap-3 bg-slate-50/50">
+            <div class="flex items-center gap-2.5 flex-wrap">
+              <span class="px-2.5 py-1 rounded-md text-xs font-bold bg-slate-900 text-white">${rec.date}</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-semibold ${rec.type === '입고' ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700'}">${rec.type}</span>
+              <span class="px-2 py-0.5 rounded text-[11px] font-semibold bg-emerald-100 text-emerald-700">${rec.status}</span>
+              <h3 class="text-sm font-bold text-slate-800">${rec.title}</h3>
+            </div>
+            <div class="flex items-center gap-3 text-xs text-slate-600">
+              <span>🚚 <b>${rec.driver}</b></span>
+              <span>💰 <b>${rec.cost.toLocaleString()}원</b></span>
+              <button onclick="deleteRecord('${rec.id}')" class="text-slate-400 hover:text-rose-600 p-1" title="삭제">
+                <i data-lucide="x" class="w-4 h-4"></i>
+              </button>
+            </div>
+          </div>
+
+          <!-- 노션 표 원클릭 복사 툴바 -->
+          <div class="px-4 sm:px-5 py-2.5 bg-blue-50/40 border-b border-slate-100 flex flex-wrap items-center justify-between gap-2">
+            <span class="text-[11px] font-medium text-slate-500">📋 노션 표 붙여넣기용 원클릭 복사:</span>
+            <div class="flex flex-wrap items-center gap-1.5">
+              <button onclick="copyText('${escapeQuotes(rec.title)}', '업무명이 복사되었습니다.')" class="px-2.5 py-1 bg-white hover:bg-blue-50 text-slate-700 border border-slate-200 rounded-md text-[11px] font-medium transition">
+                1. 업무명 (${rec.title}) 복사
+              </button>
+              <button onclick="copyText(\`${escapeBackticks(itemsCopyText)}\`, '품목 목록(${rec.items.length}개)이 노션 양식으로 복사되었습니다.')" class="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-md text-[11px] font-medium transition">
+                2. 품목 목록 전체 복사
+              </button>
+              <button onclick="copyText(\`${escapeBackticks(pkCopyText)}\`, '확인 내용(pk 수량)이 노션 양식으로 복사되었습니다.')" class="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white rounded-md text-[11px] font-medium transition">
+                3. 확인 내용(pk) 전체 복사
+              </button>
+            </div>
+          </div>
+
+          <!-- 품목 상세 테이블 -->
+          <div class="p-4 sm:px-5 overflow-x-auto">
+            <table class="w-full text-left border-collapse text-xs">
+              <thead>
+                <tr class="border-b border-slate-200 text-slate-400">
+                  <th class="py-2 w-12">No.</th>
+                  <th class="py-2">품목명</th>
+                  <th class="py-2 text-right w-28">입고 수량 (pk)</th>
+                  <th class="py-2 text-right w-28">환산 박스 (box)</th>
+                </tr>
+              </thead>
+              <tbody class="divide-y divide-slate-100">
+                ${rec.items.map((item, idx) => `
+                  <tr class="hover:bg-slate-50/80">
+                    <td class="py-2 text-slate-400 font-medium">${idx + 1}</td>
+                    <td class="py-2 font-medium text-slate-800">${item.name}</td>
+                    <td class="py-2 text-right font-semibold text-emerald-600">${item.pk.toLocaleString()} pk</td>
+                    <td class="py-2 text-right font-semibold text-blue-600">${item.box ? item.box.toLocaleString() + ' box' : '-'}</td>
+                  </tr>
+                `).join('')}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+      }).join('');
+
+      lucide.createIcons();
+    }
+
+    function copyText(text, msg) {
+      navigator.clipboard.writeText(text).then(() => showToast(msg));
+    }
+
+    function escapeBackticks(str) {
+      return String(str).replace(/\\/g, '\\\\').replace(/`/g, '\\`').replace(/\$/g, '\\$');
+    }
+
+    function escapeQuotes(str) {
+      return String(str).replace(/'/g, "\\'");
+    }
+
+    function deleteRecord(id) {
+      records = records.filter(r => r.id !== id);
+      saveToStorage();
+      renderAll();
+      showToast('내역이 삭제되었습니다.');
+    }
+
+    function clearAllData() {
+      if (!confirm('저장된 모든 입고 내역을 초기화하시겠습니까?')) return;
+      records = [];
+      saveToStorage();
+      renderAll();
+    }
+
+    function saveToStorage() {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
+    }
+
+    function loadFromStorage() {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (saved) {
+        try { records = JSON.parse(saved); } catch (e) { records = []; }
+      } else {
+        // 노션 기존 데이터 샘플 1건 기본 탑재 (10월 14일 데이터 예시)
+        records = [{
+          id: 'sample_1014',
+          date: '2026-10-14',
+          type: '입고',
+          status: '입고 완료',
+          title: '정기 입고 (218box)',
+          driver: '김민겸 기사',
+          cost: 250000,
+          totalBoxes: 218,
+          totalPks: 960,
+          items: [
+            { name: 'M(곤트란)뺑오쇼콜라생지70g_6ea*4pk/box', pk: 72, box: 18 },
+            { name: 'M(곤트란)크로와상생지65g_6ea*4pk/box', pk: 432, box: 108 },
+            { name: 'M(곤트란)사과파이95g_5ea*6pk/box', pk: 180, box: 30 },
+            { name: 'M(곤트란)아몬드류트위스트95g_10ea*6pk/box', pk: 36, box: 6 },
+            { name: 'M(곤트란)뺑오레쟁105g_6ea*4pk/box', pk: 96, box: 24 },
+            { name: 'M(곤트란)크로와상생지55g_10ea*3pk/box', pk: 96, box: 32 }
+          ]
+        }];
+      }
+      renderAll();
+    }
+
+    function exportData() {
+      const blob = new Blob([JSON.stringify(records, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `엠즈_입고이력_백업_${new Date().toISOString().slice(0,10)}.json`;
+      a.click();
+    }
+
+    function importData(event) {
+      const file = event.target.files[0];
+      if (!file) return;
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const imported = JSON.parse(e.target.result);
+          if (Array.isArray(imported)) {
+            records = imported;
+            saveToStorage();
+            renderAll();
+            showToast('데이터를 성공적으로 불러왔습니다.');
+          }
+        } catch (err) {
+          showToast('올바른 JSON 파일이 아닙니다.');
+        }
+      };
+      reader.readAsText(file);
+    }
+
+    function showToast(msg) {
+      const toast = document.getElementById('toast');
+      document.getElementById('toastMsg').textContent = msg;
+      toast.classList.remove('opacity-0');
+      setTimeout(() => toast.classList.add('opacity-0'), 2600);
+    }
+  </script>
+</body>
+</html>
