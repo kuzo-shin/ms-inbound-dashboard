@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>엠즈 입고 및 회송 통합 대시보드 v3.5</title>
+  <title>엠즈 입고 및 회송 통합 대시보드 v3.6</title>
   <!-- Tailwind CSS & SheetJS & Lucide Icons -->
   <script src="https://cdn.tailwindcss.com"></script>
   <script src="https://cdn.sheetjs.com/xlsx-0.20.1/package/dist/xlsx.full.min.js"></script>
@@ -28,7 +28,7 @@
       <div class="flex items-center gap-2.5 flex-wrap">
         <span class="text-2xl">🚚</span>
         <h1 class="text-xl font-bold text-slate-900">엠즈 입고 및 회송 통합 대시보드</h1>
-        <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-600 text-white rounded-full">v3.5 Cloud</span>
+        <span class="text-xs font-semibold px-2.5 py-1 bg-indigo-600 text-white rounded-full">v3.6 Cloud</span>
         <span id="cloudBadge" class="text-[11px] font-medium px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md">로컬 저장 모드</span>
       </div>
       <p class="text-xs text-slate-500 mt-1">
@@ -119,27 +119,30 @@
         <div class="text-xl font-bold text-indigo-600 my-0.5" id="statUniqueItems">0종</div>
         <div class="text-[11px] text-slate-400 truncate" id="statTopItem">-</div>
       </div>
-      <div class="col-span-2 bg-white px-4 py-3 rounded-xl border border-slate-200/80 shadow-sm flex items-center justify-between">
-        <div>
-          <div class="text-[11px] font-medium text-slate-400">누적 총 운임 정산액 (입고+회송)</div>
-          <div class="text-[11px] text-slate-400 mt-0.5" id="statCostBreakdown">입고 0원 / 회송 0원 (0건)</div>
-        </div>
-        <div class="text-xl font-bold text-slate-900" id="statCost">0원</div>
+      <div class="bg-white px-3.5 py-3 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
+        <div class="text-[11px] font-medium text-slate-400">누적 총 운임 (입고+회송)</div>
+        <div class="text-lg font-bold text-slate-900 my-0.5" id="statCost">0원</div>
+        <div class="text-[10px] text-slate-400 truncate" id="statCostBreakdown">입고 0 / 회송 0</div>
+      </div>
+      <div class="bg-indigo-50/60 px-3.5 py-3 rounded-xl border border-indigo-200/80 shadow-sm flex flex-col justify-between">
+        <div class="text-[11px] font-semibold text-indigo-700">누적 매입 금액 (pk×단가)</div>
+        <div class="text-lg font-bold text-indigo-700 my-0.5" id="statPurchaseAmount">0원</div>
+        <div class="text-[10px] text-indigo-500 truncate" id="statPriceSetRate">단가 등록 0/0종</div>
       </div>
     </div>
 
-    <!-- 우측: 품목별 누적 통계 & 순위 TOP 5 간략 그래프 위젯 (7칸) -->
+    <!-- 우측: 품목별 누적 통계 & 순위 TOP 10 간략 그래프 위젯 (7칸) -->
     <div class="lg:col-span-7 bg-white p-4 rounded-xl border border-slate-200/80 shadow-sm flex flex-col justify-between">
-      <div class="flex items-center justify-between mb-2.5">
+      <div class="flex items-center justify-between mb-2">
         <div class="flex items-center gap-2">
-          <span class="text-sm font-bold text-slate-900">📊 품목별 누적 입고 상위 TOP 5</span>
+          <span class="text-sm font-bold text-slate-900">📊 품목별 누적 입고 상위 TOP 10</span>
           <span class="text-[11px] text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded-md font-semibold">(pk 기준)</span>
         </div>
         <button onclick="switchMainView('ANALYTICS')" class="text-[11px] font-semibold text-indigo-600 hover:text-indigo-800 flex items-center gap-0.5 no-print">
           전체 순위 보기 <i data-lucide="chevron-right" class="w-3.5 h-3.5"></i>
         </button>
       </div>
-      <div id="top5ChartContainer" class="space-y-2 my-auto"></div>
+      <div id="top5ChartContainer" class="space-y-1.5 my-auto"></div>
     </div>
   </section>
 
@@ -156,6 +159,9 @@
       <button id="tabBtnReturns" onclick="switchMainView('RETURNS')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
         <i data-lucide="rotate-ccw" class="w-3.5 h-3.5 text-amber-600"></i> 회송 내역 관리
         <span id="returnTabCountBadge" class="px-1.5 py-0.2 bg-amber-100 text-amber-800 rounded-full text-[10px] font-extrabold">0</span>
+      </button>
+      <button id="tabBtnPrices" onclick="switchMainView('PRICES')" class="flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold text-slate-600 hover:text-slate-900 transition">
+        <i data-lucide="coins" class="w-3.5 h-3.5 text-emerald-600"></i> 매입가 DB 관리
       </button>
     </div>
 
@@ -281,6 +287,29 @@
     </div>
   </section>
 
+  <!-- 뷰 4: 품목별 매입가 DB 마스터 관리 컨테이너 -->
+  <section id="pricesViewContainer" class="hidden space-y-4">
+    <div class="bg-white p-4 sm:p-5 rounded-2xl border border-slate-200/80 shadow-sm">
+      <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
+        <div>
+          <h3 class="text-sm font-bold text-slate-900 flex items-center gap-1.5">
+            💰 품목별 매입단가(pk 기준) 마스터 DB
+          </h3>
+          <p class="text-xs text-slate-500 mt-0.5">
+            한 번 입력해 두면 과거 내역과 앞으로 업로드할 엑셀의 동일 품목(상품코드/상품명)에 <b>자동으로 매입단가가 적용되어 금액(입고 pk × 단가)이 계산</b>됩니다.
+          </p>
+        </div>
+        <div class="flex items-center gap-2 no-print">
+          <label class="flex items-center gap-1.5 px-3 py-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded-lg text-xs font-semibold cursor-pointer transition">
+            <i data-lucide="upload" class="w-3.5 h-3.5"></i> 단가표 엑셀 일괄등록
+            <input type="file" id="priceExcelInput" accept=".xlsx,.xls,.csv" class="hidden" onchange="handlePriceExcel(this.files)">
+          </label>
+        </div>
+      </div>
+      <div class="overflow-x-auto mt-3" id="pricesTableWrapper"></div>
+    </div>
+  </section>
+
   <!-- 필드 수정 모달 (인라인 에디터 + 내용 삭제 버튼 포함) -->
   <div id="editFieldModal" class="fixed inset-0 bg-slate-900/50 hidden items-center justify-center z-50 p-4">
     <div class="bg-white rounded-2xl max-w-md w-full p-5 shadow-xl border border-slate-200">
@@ -380,6 +409,7 @@
     // 로컬 스토리지 키 정의
     const STORAGE_KEY = 'ms_inbound_records_v3_5';
     const RETURNS_STORAGE_KEY = 'ms_return_records_v3_5';
+    const PRICES_STORAGE_KEY = 'ms_unit_prices_v3_6';
     const CLOUD_URL_KEY = 'ms_inbound_cloud_url_v3';
 
     // 11월 4일 및 10월 엠즈 입고 내역 실제 데이터 11건 기본 탑재
@@ -399,11 +429,29 @@
 
     let records = [];
     let returnRecords = [];
+    let unitPrices = {}; // { [상품코드 또는 상품명]: pk당_매입단가(number) }
     let currentFilter = 'ALL';
     let currentMainView = 'DAILY';
     let collapsedMap = {};
     let editingTarget = null;
     let confirmCallback = null;
+
+    // 품목의 pk당 매입단가 조회 헬퍼
+    function getItemUnitPrice(item) {
+      if (!item) return 0;
+      if (item.code && unitPrices[item.code] !== undefined) return Number(unitPrices[item.code]) || 0;
+      if (item.name && unitPrices[item.name] !== undefined) return Number(unitPrices[item.name]) || 0;
+      return 0;
+    }
+
+    // 품목의 pk당 매입단가 저장 헬퍼
+    function setItemUnitPrice(code, name, priceVal) {
+      const num = parseInt(String(priceVal).replace(/[^0-9]/g, ''), 10) || 0;
+      if (code && code !== '-') unitPrices[code] = num;
+      if (name) unitPrices[name] = num;
+      saveToStorage();
+      renderAll();
+    }
 
     function getActiveCloudUrl() {
       return localStorage.getItem(CLOUD_URL_KEY) || DEFAULT_CLOUD_URL || '';
@@ -443,9 +491,11 @@
       const btnDaily = document.getElementById('tabBtnDaily');
       const btnAnalytics = document.getElementById('tabBtnAnalytics');
       const btnReturns = document.getElementById('tabBtnReturns');
+      const btnPrices = document.getElementById('tabBtnPrices');
       const dailyContainer = document.getElementById('dailyViewContainer');
       const analyticsContainer = document.getElementById('analyticsViewContainer');
       const returnsContainer = document.getElementById('returnsViewContainer');
+      const pricesContainer = document.getElementById('pricesViewContainer');
       const accordionControls = document.getElementById('accordionControls');
 
       const activeClass = 'flex items-center gap-1.5 px-3.5 py-1.5 rounded-lg text-xs font-bold bg-white text-slate-900 shadow-sm transition';
@@ -454,11 +504,15 @@
       btnDaily.className = view === 'DAILY' ? activeClass : inactiveClass;
       btnAnalytics.className = view === 'ANALYTICS' ? activeClass : inactiveClass;
       btnReturns.className = view === 'RETURNS' ? activeClass : inactiveClass;
+      if (btnPrices) btnPrices.className = view === 'PRICES' ? activeClass : inactiveClass;
 
       dailyContainer.classList.toggle('hidden', view !== 'DAILY');
       analyticsContainer.classList.toggle('hidden', view !== 'ANALYTICS');
       returnsContainer.classList.toggle('hidden', view !== 'RETURNS');
+      if (pricesContainer) pricesContainer.classList.toggle('hidden', view !== 'PRICES');
       accordionControls.classList.toggle('hidden', view !== 'DAILY');
+      const dateTabsEl = document.getElementById('dateTabs');
+      if (dateTabsEl) dateTabsEl.classList.toggle('hidden', view === 'RETURNS' || view === 'PRICES');
 
       renderAll();
     }
@@ -656,6 +710,8 @@
         renderAnalytics();
       } else if (currentMainView === 'RETURNS') {
         renderReturnsView();
+      } else if (currentMainView === 'PRICES') {
+        renderPricesView();
       }
       lucide.createIcons();
     }
@@ -665,7 +721,7 @@
       if (badge) badge.textContent = returnRecords.length;
     }
 
-    // 상단 TOP 5 간략 가로 막대그래프 위젯 렌더링 (pk 기준)
+    // 상단 TOP 10 간략 가로 막대그래프 위젯 렌더링 (pk 기준, 1열 가로 나열)
     function renderTop5Widget() {
       const container = document.getElementById('top5ChartContainer');
       if (!container) return;
@@ -683,7 +739,7 @@
         r.items.forEach(it => {
           const key = (it.code ? it.code + '_' : '') + it.name;
           if (!itemMap.has(key)) {
-            itemMap.set(key, { name: it.name, box: 0, pk: 0 });
+            itemMap.set(key, { code: it.code, name: it.name, box: 0, pk: 0 });
           }
           const st = itemMap.get(key);
           st.box += it.box;
@@ -692,30 +748,32 @@
         });
       });
 
-      const top5 = Array.from(itemMap.values())
+      const top10 = Array.from(itemMap.values())
         .sort((a, b) => b.pk - a.pk)
-        .slice(0, 5);
+        .slice(0, 10);
 
-      const maxPk = top5[0]?.pk || 1;
-      const barColors = ['bg-emerald-600', 'bg-teal-500', 'bg-blue-500', 'bg-indigo-500', 'bg-slate-400'];
+      const maxPk = top10[0]?.pk || 1;
+      const barColors = [
+        'bg-emerald-600', 'bg-emerald-500', 'bg-teal-500', 'bg-blue-500', 'bg-indigo-500',
+        'bg-indigo-400', 'bg-slate-500', 'bg-slate-400', 'bg-slate-400', 'bg-slate-300'
+      ];
 
-      container.innerHTML = top5.map((item, idx) => {
+      container.innerHTML = top10.map((item, idx) => {
         const share = totalPkAll ? ((item.pk / totalPkAll) * 100).toFixed(1) : '0.0';
-        const widthPct = Math.max(6, Math.round((item.pk / maxPk) * 100));
+        const widthPct = Math.max(4, Math.round((item.pk / maxPk) * 100));
+        const shortName = item.name.replace(/^M(\[.*?\]|\(.*?\))/, '');
         return `
           <div class="grid grid-cols-12 items-center gap-2 text-xs">
-            <div class="col-span-5 sm:col-span-5 flex items-center gap-1.5 min-w-0">
-              <span class="w-5 h-5 rounded-md ${idx === 0 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'} text-[10px] font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
-              <span class="font-medium text-slate-700 truncate" title="${item.name}">${item.name}</span>
+            <div class="col-span-5 sm:col-span-4 flex items-center gap-1.5 min-w-0">
+              <span class="w-4 h-4 rounded ${idx < 3 ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600'} text-[10px] font-bold flex items-center justify-center shrink-0">${idx + 1}</span>
+              <span class="font-medium text-slate-700 truncate text-[11px]" title="${item.name}">${shortName}</span>
             </div>
-            <div class="col-span-4 sm:col-span-4">
-              <div class="w-full bg-slate-100 h-2.5 rounded-full overflow-hidden">
-                <div class="${barColors[idx] || 'bg-emerald-500'} h-full rounded-full transition-all duration-300" style="width: ${widthPct}%"></div>
-              </div>
+            <div class="col-span-4 sm:col-span-5 bg-slate-100 h-2 rounded-full overflow-hidden">
+              <div class="${barColors[idx] || 'bg-slate-400'} h-full rounded-full transition-all duration-300" style="width: ${widthPct}%"></div>
             </div>
-            <div class="col-span-3 sm:col-span-3 text-right font-semibold text-slate-700 whitespace-nowrap">
+            <div class="col-span-3 text-right font-semibold text-slate-700 whitespace-nowrap text-[11px]">
               <span class="text-emerald-600 font-bold">${item.pk.toLocaleString()}</span><span class="text-[10px] text-slate-400">pk</span>
-              <span class="text-[10px] text-slate-400 ml-1">(${share}%)</span>
+              <span class="text-[10px] text-slate-400 ml-0.5">(${share}%)</span>
             </div>
           </div>
         `;
@@ -735,10 +793,18 @@
       const totalCost = inboundCost + returnCost;
 
       const itemMap = new Map();
+      const pricedSet = new Set();
+      let totalPurchaseAmount = 0;
+
       filtered.forEach(r => {
         r.items.forEach(it => {
           const k = it.name;
           itemMap.set(k, (itemMap.get(k) || 0) + it.pk);
+          const uPrice = getItemUnitPrice(it);
+          if (uPrice > 0) {
+            pricedSet.add(k);
+            totalPurchaseAmount += (it.pk * uPrice);
+          }
         });
       });
       let topItemName = '-';
@@ -758,34 +824,33 @@
       document.getElementById('statCost').textContent = `${totalCost.toLocaleString()}원`;
       const breakdownEl = document.getElementById('statCostBreakdown');
       if (breakdownEl) {
-        breakdownEl.textContent = `입고 ${inboundCost.toLocaleString()}원 / 회송 ${returnCost.toLocaleString()}원 (${filteredReturns.length}건)`;
+        breakdownEl.textContent = `입고 ${inboundCost.toLocaleString()} / 회송 ${returnCost.toLocaleString()}`;
       }
+      const purchaseEl = document.getElementById('statPurchaseAmount');
+      if (purchaseEl) purchaseEl.textContent = `${totalPurchaseAmount.toLocaleString()}원`;
+      const rateEl = document.getElementById('statPriceSetRate');
+      if (rateEl) rateEl.textContent = `단가 등록 ${pricedSet.size}/${itemMap.size}종`;
     }
 
     function renderDateTabs() {
-      const allDates = [
-        ...records.map(r => r.date),
-        ...returnRecords.map(r => r.date)
-      ];
-      const months = Array.from(new Set(allDates.map(d => d.slice(0, 7)))).sort().reverse();
-      const dates = Array.from(new Set(records.map(r => r.date))).sort().reverse();
+      // 회송 내역(returnRecords)은 제외하고 순수 입고 내역(records) 날짜만 기준으로 월별 필터 생성
+      const inboundDates = records.map(r => r.date).filter(Boolean);
+      const months = Array.from(new Set(inboundDates.map(d => d.slice(0, 7)))).sort().reverse();
       const container = document.getElementById('dateTabs');
 
-      let html = `<button onclick="setFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${currentFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">전체 보기</button>`;
+      // 현재 선택된 필터 월에 입고 내역이 없다면 전체 보기로 자동 복귀
+      if (currentFilter !== 'ALL' && !months.includes(currentFilter)) {
+        currentFilter = 'ALL';
+      }
+
+      let html = `<button onclick="setFilter('ALL')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${currentFilter === 'ALL' ? 'bg-slate-900 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">전체 보기 (${records.length}건)</button>`;
 
       months.forEach(m => {
         const [y, mm] = m.split('-');
+        const mCount = records.filter(r => r.date && r.date.startsWith(m)).length;
         const active = currentFilter === m;
-        html += `<button onclick="setFilter('${m}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${active ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">${y}년 ${parseInt(mm, 10)}월</button>`;
+        html += `<button onclick="setFilter('${m}')" class="px-3 py-1.5 rounded-lg text-xs font-semibold transition whitespace-nowrap ${active ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-100'}">${y}년 ${parseInt(mm, 10)}월 (${mCount}건)</button>`;
       });
-
-      if (currentMainView !== 'RETURNS') {
-        dates.forEach(d => {
-          const shortD = d.slice(5).replace('-', '/');
-          const active = currentFilter === d;
-          html += `<button onclick="setFilter('${d}')" class="px-2.5 py-1.5 rounded-lg text-xs font-medium transition whitespace-nowrap ${active ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-slate-200'}">${shortD}</button>`;
-        });
-      }
 
       container.innerHTML = html;
     }
@@ -807,9 +872,8 @@
     function getFilteredReturns() {
       const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
       return returnRecords.filter(r => {
-        const matchFilter = currentFilter === 'ALL' || r.date.startsWith(currentFilter);
         const matchQuery = !q || r.date.includes(q) || r.reason.toLowerCase().includes(q) || r.driver.toLowerCase().includes(q) || (r.note && r.note.toLowerCase().includes(q));
-        return matchFilter && matchQuery;
+        return matchQuery;
       });
     }
 
@@ -832,7 +896,21 @@
       showToast(`${rec.date} 상태가 '${rec.status}'(으)로 변경되었습니다.`);
     }
 
-    // 인라인 수정 모달 제어 (입고 내역 & 회송 내역 공용)
+    // 인라인 수정 모달 제어 (입고 내역 & 회송 내역 & 품목 매입단가 공용)
+    function editUnitPriceModal(code, name) {
+      const curPrice = getItemUnitPrice({ code, name });
+      editingTarget = { id: code, field: 'unitPrice', label: 'pk당 매입단가(원)', isUnitPrice: true, code, name };
+      document.getElementById('editModalTitle').textContent = `[${name}] pk당 매입단가(원) 입력`;
+      const input = document.getElementById('editModalInput');
+      input.value = curPrice > 0 ? curPrice : '';
+      input.rows = 1;
+      const modal = document.getElementById('editFieldModal');
+      modal.classList.remove('hidden');
+      modal.classList.add('flex');
+      lucide.createIcons();
+      setTimeout(() => { input.focus(); input.select(); }, 50);
+    }
+
     function editRecordField(id, field, label, isReturn = false) {
       const targetList = isReturn ? returnRecords : records;
       const rec = targetList.find(r => r.id === id);
@@ -858,6 +936,12 @@
 
     function clearEditField() {
       if (!editingTarget) return;
+      if (editingTarget.isUnitPrice) {
+        setItemUnitPrice(editingTarget.code, editingTarget.name, 0);
+        showToast('매입단가가 초기화되었습니다.');
+        closeEditModal();
+        return;
+      }
       const { id, field, isReturn } = editingTarget;
       const targetList = isReturn ? returnRecords : records;
       const rec = targetList.find(r => r.id === id);
@@ -876,11 +960,17 @@
 
     function saveEditModal() {
       if (!editingTarget) return;
+      const val = document.getElementById('editModalInput').value;
+      if (editingTarget.isUnitPrice) {
+        setItemUnitPrice(editingTarget.code, editingTarget.name, val);
+        showToast(`[${editingTarget.name}] 매입단가가 저장되었습니다.`);
+        closeEditModal();
+        return;
+      }
       const { id, field, label, isReturn } = editingTarget;
       const targetList = isReturn ? returnRecords : records;
       const rec = targetList.find(r => r.id === id);
       if (rec) {
-        const val = document.getElementById('editModalInput').value;
         if (field === 'cost') {
           rec.cost = parseInt(String(val).replace(/[^0-9]/g, ''), 10) || 0;
         } else {
@@ -1057,6 +1147,7 @@
       container.innerHTML = filtered.map(rec => {
         const displayItems = getDisplayItems(rec.items);
         const isCollapsed = !!collapsedMap[rec.id];
+        const dailyPurchaseTotal = displayItems.reduce((sum, it) => sum + (it.pk * getItemUnitPrice(it)), 0);
 
         return `
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm overflow-hidden transition">
@@ -1073,6 +1164,7 @@
               </button>
               <h3 class="text-sm font-bold text-slate-800 cursor-pointer hover:text-blue-600" onclick="editRecordField('${rec.id}', 'title', '업무 제목')">${rec.title}</h3>
               <span class="text-xs text-slate-400 font-medium">(${displayItems.length}종 / 총 ${rec.totalPks.toLocaleString()}pk)</span>
+              ${dailyPurchaseTotal > 0 ? `<span class="px-2 py-0.5 rounded-md text-[11px] font-bold bg-indigo-50 text-indigo-700 border border-indigo-200">매입합계: ${dailyPurchaseTotal.toLocaleString()}원</span>` : ''}
               ${rec.memo ? `<span onclick="editRecordField('${rec.id}', 'memo', '비고 메모')" class="px-2 py-0.5 rounded-full text-[11px] bg-amber-50 text-amber-800 border border-amber-200 cursor-pointer">📝 ${rec.memo}</span>` : ''}
             </div>
 
@@ -1095,13 +1187,18 @@
                     <th class="py-1.5 w-10">No.</th>
                     <th class="py-1.5 w-20">상품코드</th>
                     <th class="py-1.5">상품명</th>
-                    <th class="py-1.5 text-center w-16">입수</th>
-                    <th class="py-1.5 text-right w-24">발주 (box)</th>
-                    <th class="py-1.5 text-right w-24">환산 (pk)</th>
+                    <th class="py-1.5 text-center w-14">입수</th>
+                    <th class="py-1.5 text-right w-20">발주 (box)</th>
+                    <th class="py-1.5 text-right w-20">환산 (pk)</th>
+                    <th class="py-1.5 text-right w-28">매입단가 (pk)</th>
+                    <th class="py-1.5 text-right w-32">입고 금액 (pk×단가)</th>
                   </tr>
                 </thead>
                 <tbody class="divide-y divide-slate-100">
-                  ${displayItems.map((item, idx) => `
+                  ${displayItems.map((item, idx) => {
+                    const uPrice = getItemUnitPrice(item);
+                    const rowAmt = item.pk * uPrice;
+                    return `
                     <tr class="hover:bg-slate-50/80">
                       <td class="py-2 text-slate-400 font-medium">${idx + 1}</td>
                       <td class="py-2 text-slate-400 font-mono text-[11px]">${item.code || '-'}</td>
@@ -1112,14 +1209,22 @@
                       <td class="py-2 text-center text-slate-500">${item.ipsu || '-'}</td>
                       <td class="py-2 text-right font-semibold text-blue-600">${item.box.toLocaleString()} box</td>
                       <td class="py-2 text-right font-semibold text-emerald-600">${item.pk.toLocaleString()} pk</td>
+                      <td class="py-2 text-right font-medium ${uPrice > 0 ? 'text-slate-600' : 'text-slate-300'}">
+                        ${uPrice > 0 ? uPrice.toLocaleString() + '원' : '-'}
+                      </td>
+                      <td class="py-2 text-right font-bold ${rowAmt > 0 ? 'text-indigo-700' : 'text-slate-300'}">
+                        ${rowAmt > 0 ? rowAmt.toLocaleString() + '원' : '-'}
+                      </td>
                     </tr>
-                  `).join('')}
+                  `;}).join('')}
                 </tbody>
                 <tfoot>
                   <tr class="border-t-2 border-slate-200 bg-slate-50/50 font-bold text-slate-800">
                     <td colspan="4" class="py-2 pl-2">일일 합계 (${displayItems.length}종)</td>
                     <td class="py-2 text-right text-blue-600">${rec.totalBoxes.toLocaleString()} box</td>
                     <td class="py-2 text-right text-emerald-600">${rec.totalPks.toLocaleString()} pk</td>
+                    <td class="py-2 text-right text-slate-400 text-[11px]">매입 합계</td>
+                    <td class="py-2 text-right text-indigo-700">${dailyPurchaseTotal > 0 ? dailyPurchaseTotal.toLocaleString() + '원' : '-'}</td>
                   </tr>
                 </tfoot>
               </table>
@@ -1131,7 +1236,7 @@
       lucide.createIcons();
     }
 
-    // 뷰 2: 품목별 누적 통계 & TOP 순위 렌더링 (pk 기준 정렬 및 비중 계산)
+    // 뷰 2: 품목별 누적 통계 & TOP 순위 렌더링 (pk 기준 정렬 및 누적 매입금액 표시)
     function renderAnalytics() {
       const container = document.getElementById('analyticsViewContainer');
       const filtered = getFilteredRecords();
@@ -1144,6 +1249,7 @@
       const itemStats = new Map();
       let grandTotalBox = 0;
       let grandTotalPk = 0;
+      let grandTotalAmt = 0;
 
       filtered.forEach(rec => {
         rec.items.forEach(it => {
@@ -1167,18 +1273,28 @@
         });
       });
 
-      const sortedItems = Array.from(itemStats.values()).sort((a, b) => b.totalPk - a.totalPk);
+      const sortedItems = Array.from(itemStats.values()).map(st => {
+        const uPrice = getItemUnitPrice(st);
+        const totalAmt = st.totalPk * uPrice;
+        grandTotalAmt += totalAmt;
+        return { ...st, uPrice, totalAmt };
+      }).sort((a, b) => b.totalPk - a.totalPk);
+
       const maxPk = sortedItems[0]?.totalPk || 1;
 
       container.innerHTML = `
         <div class="bg-white rounded-2xl border border-slate-200/80 shadow-sm p-5">
           <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pb-4 border-b border-slate-100">
             <div>
-              <h3 class="text-sm font-bold text-slate-900">📊 품목별 누적 입고량 순위 (총 ${sortedItems.length}종 · 환산 팩 pk 기준)</h3>
-              <p class="text-xs text-slate-400 mt-0.5">선택된 기간 동안 환산 팩(pk) 기준 가장 많이 입고된 품목 순위 및 비중입니다.</p>
+              <h3 class="text-sm font-bold text-slate-900">📊 품목별 누적 입고량 및 매입 금액 순위 (총 ${sortedItems.length}종 · pk 기준)</h3>
+              <p class="text-xs text-slate-400 mt-0.5">매입단가 수정은 [💰 매입가 DB 관리] 탭에서 일괄 관리할 수 있습니다.</p>
             </div>
-            <div class="text-xs font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg">
-              합계: <span class="text-emerald-600">${grandTotalPk.toLocaleString()} pk</span> / <span class="text-blue-600">${grandTotalBox.toLocaleString()} box</span>
+            <div class="flex flex-wrap items-center gap-2 text-xs font-semibold text-slate-700 bg-slate-100 px-3 py-1.5 rounded-lg">
+              <span>누적팩: <b class="text-emerald-600">${grandTotalPk.toLocaleString()} pk</b></span>
+              <span>|</span>
+              <span>누적박스: <b class="text-blue-600">${grandTotalBox.toLocaleString()} box</b></span>
+              <span>|</span>
+              <span>총 매입금액: <b class="text-indigo-700">${grandTotalAmt.toLocaleString()}원</b></span>
             </div>
           </div>
 
@@ -1189,10 +1305,12 @@
                   <th class="py-2 w-12">순위</th>
                   <th class="py-2 w-20">상품코드</th>
                   <th class="py-2">상품명</th>
-                  <th class="py-2 text-center w-20">입고 횟수</th>
-                  <th class="py-2 text-right w-28">누적 팩 (pk)</th>
-                  <th class="py-2 text-right w-28">누적 박스 (box)</th>
-                  <th class="py-2 pl-4 w-44">물량 비중 (pk %)</th>
+                  <th class="py-2 text-center w-16">입고횟수</th>
+                  <th class="py-2 text-right w-24">누적 팩 (pk)</th>
+                  <th class="py-2 text-right w-24">누적 박스</th>
+                  <th class="py-2 text-right w-28">매입단가 (pk)</th>
+                  <th class="py-2 text-right w-32">누적 매입금액</th>
+                  <th class="py-2 pl-4 w-36">물량 비중 (pk %)</th>
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-100">
@@ -1207,6 +1325,12 @@
                     <td class="py-2.5 text-center text-slate-600">${st.days.size}회</td>
                     <td class="py-2.5 text-right font-bold text-emerald-600">${st.totalPk.toLocaleString()} pk</td>
                     <td class="py-2.5 text-right font-semibold text-blue-600">${st.totalBox.toLocaleString()} box</td>
+                    <td class="py-2.5 text-right font-medium ${st.uPrice > 0 ? 'text-slate-600' : 'text-slate-300'}">
+                      ${st.uPrice > 0 ? st.uPrice.toLocaleString() + '원' : '-'}
+                    </td>
+                    <td class="py-2.5 text-right font-bold ${st.totalAmt > 0 ? 'text-indigo-700' : 'text-slate-300'}">
+                      ${st.totalAmt > 0 ? st.totalAmt.toLocaleString() + '원' : '-'}
+                    </td>
                     <td class="py-2.5 pl-4">
                       <div class="flex items-center gap-2">
                         <div class="w-full bg-slate-100 h-2 rounded-full overflow-hidden">
@@ -1218,13 +1342,144 @@
                   </tr>`;
                 }).join('')}
               </tbody>
+              <tfoot>
+                <tr class="border-t-2 border-slate-200 bg-slate-50/70 font-bold text-slate-800">
+                  <td colspan="4" class="py-2.5 pl-2">전체 합계 (${sortedItems.length}종)</td>
+                  <td class="py-2.5 text-right text-emerald-600">${grandTotalPk.toLocaleString()} pk</td>
+                  <td class="py-2.5 text-right text-blue-600">${grandTotalBox.toLocaleString()} box</td>
+                  <td class="py-2.5 text-right text-slate-400 text-[11px]">누적 매입총액</td>
+                  <td class="py-2.5 text-right text-indigo-700">${grandTotalAmt.toLocaleString()}원</td>
+                  <td></td>
+                </tr>
+              </tfoot>
             </table>
           </div>
         </div>
       `;
     }
 
-    // 월말 정산용 4-시트 엑셀(.xlsx) 자동 생성 및 다운로드 (회송 내역 시트 포함)
+    // 뷰 4: 매입가 DB 마스터 관리 화면 렌더링 (전체 취급 품목의 pk 단가 일괄 입력/관리)
+    function renderPricesView() {
+      const wrapper = document.getElementById('pricesTableWrapper');
+      if (!wrapper) return;
+      const q = (document.getElementById('searchInput')?.value || '').toLowerCase();
+
+      const catalogMap = new Map();
+      records.forEach(r => {
+        r.items.forEach(it => {
+          const key = (it.code ? it.code + '_' : '') + it.name;
+          if (!catalogMap.has(key)) {
+            catalogMap.set(key, {
+              code: it.code || '-',
+              name: it.name,
+              ipsu: it.ipsu || 1,
+              totalPk: 0,
+              totalBox: 0
+            });
+          }
+          const entry = catalogMap.get(key);
+          entry.totalPk += it.pk;
+          entry.totalBox += it.box;
+        });
+      });
+
+      const list = Array.from(catalogMap.values())
+        .filter(it => !q || it.name.toLowerCase().includes(q) || it.code.includes(q))
+        .sort((a, b) => b.totalPk - a.totalPk);
+
+      if (list.length === 0) {
+        wrapper.innerHTML = `<div class="py-10 text-center text-slate-400 text-xs">표시할 품목이 없습니다.</div>`;
+        return;
+      }
+
+      wrapper.innerHTML = `
+        <table class="w-full text-left border-collapse text-xs">
+          <thead>
+            <tr class="border-b border-slate-200 text-slate-400">
+              <th class="py-2 w-12">No.</th>
+              <th class="py-2 w-28">상품코드</th>
+              <th class="py-2">상품명</th>
+              <th class="py-2 text-center w-24">박스입수</th>
+              <th class="py-2 text-right w-44">pk당 매입단가 (원)</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-slate-100">
+            ${list.map((it, idx) => {
+              const uPrice = getItemUnitPrice(it);
+              return `
+              <tr class="hover:bg-slate-50/80">
+                <td class="py-2.5 text-slate-400 font-medium">${idx + 1}</td>
+                <td class="py-2.5 font-mono text-[11px] text-slate-500">${it.code}</td>
+                <td class="py-2.5 font-medium text-slate-800">${it.name}</td>
+                <td class="py-2.5 text-center text-slate-500">${it.ipsu}pk/box</td>
+                <td class="py-2.5 text-right">
+                  <div class="inline-flex items-center gap-1">
+                    <input type="number" step="100" value="${uPrice > 0 ? uPrice : ''}" placeholder="단가 입력"
+                      onchange="setItemUnitPrice('${escapeQuotes(it.code)}', '${escapeQuotes(it.name)}', this.value); showToast('단가가 자동 저장되었습니다.');"
+                      class="w-32 text-right text-xs px-2.5 py-1.5 rounded-lg border ${uPrice > 0 ? 'border-indigo-300 bg-indigo-50/40 font-bold text-indigo-700' : 'border-slate-200 bg-white text-slate-700'} focus:outline-none focus:border-indigo-600">
+                    <span class="text-[11px] text-slate-400">원</span>
+                  </div>
+                </td>
+              </tr>`;
+            }).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+
+    // 단가표 엑셀 일괄 업로드 파서 (상품코드/상품명 + 단가 열 자동 매핑)
+    function handlePriceExcel(files) {
+      if (!files || !files.length) return;
+      const file = files[0];
+      const reader = new FileReader();
+      reader.onload = e => {
+        try {
+          const data = new Uint8Array(e.target.result);
+          const workbook = XLSX.read(data, { type: 'array', codepage: 949 });
+          const sheet = workbook.Sheets[workbook.SheetNames[0]];
+          const rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '' });
+          let colCode = -1, colName = -1, colPrice = -1, startRow = 1;
+
+          for (let r = 0; r < Math.min(10, rows.length); r++) {
+            rows[r].forEach((cell, idx) => {
+              const s = String(cell).trim();
+              if (/상품코드|품목코드|코드/.test(s)) colCode = idx;
+              if (/상품명|품목명|품명/.test(s)) colName = idx;
+              if (/매입가|단가|매입단가|가격|금액|price/i.test(s)) colPrice = idx;
+            });
+            if (colPrice !== -1) { startRow = r + 1; break; }
+          }
+
+          if (colPrice === -1) {
+            showToast('엑셀에서 [매입단가/단가] 열을 찾지 못했습니다.');
+            return;
+          }
+
+          let updated = 0;
+          for (let i = startRow; i < rows.length; i++) {
+            const row = rows[i];
+            if (!row) continue;
+            const code = colCode !== -1 ? String(row[colCode] || '').trim() : '';
+            const name = colName !== -1 ? String(row[colName] || '').trim() : '';
+            const price = parseInt(String(row[colPrice] || '').replace(/[^0-9]/g, ''), 10) || 0;
+            if ((code || name) && price > 0) {
+              if (code) unitPrices[code] = price;
+              if (name) unitPrices[name] = price;
+              updated++;
+            }
+          }
+          saveToStorage();
+          renderAll();
+          showToast(`단가표 엑셀에서 총 ${updated}개 품목의 매입단가가 일괄 등록되었습니다!`);
+        } catch (err) {
+          showToast('단가표 엑셀을 읽는 중 오류가 발생했습니다.');
+        }
+      };
+      reader.readAsArrayBuffer(file);
+      document.getElementById('priceExcelInput').value = '';
+    }
+
+    // 월말 정산용 4-시트 엑셀(.xlsx) 자동 생성 및 다운로드 (매입단가 및 매입금액 포함)
     function downloadSettlementExcel() {
       const filtered = getFilteredRecords();
       const filteredReturns = getFilteredReturns();
@@ -1235,20 +1490,25 @@
 
       const wb = XLSX.utils.book_new();
 
-      const dailyRows = filtered.map((r, i) => ({
-        'No': i + 1,
-        '입고일자': r.date,
-        '발주일자': r.orderDate || '-',
-        '구분': r.type,
-        '입고상태': r.status,
-        '업무명': r.title,
-        '품목종수': getDisplayItems(r.items).length,
-        '총 박스(box)': r.totalBoxes,
-        '총 환산팩(pk)': r.totalPks,
-        '화물기사': r.driver,
-        '운임비용(원)': r.cost,
-        '비고(메모)': r.memo || ''
-      }));
+      const dailyRows = filtered.map((r, i) => {
+        const disp = getDisplayItems(r.items);
+        const dayPurchaseAmt = disp.reduce((s, it) => s + (it.pk * getItemUnitPrice(it)), 0);
+        return {
+          'No': i + 1,
+          '입고일자': r.date,
+          '발주일자': r.orderDate || '-',
+          '구분': r.type,
+          '입고상태': r.status,
+          '업무명': r.title,
+          '품목종수': disp.length,
+          '총 박스(box)': r.totalBoxes,
+          '총 환산팩(pk)': r.totalPks,
+          '일일 매입금액(원)': dayPurchaseAmt,
+          '화물기사': r.driver,
+          '운임비용(원)': r.cost,
+          '비고(메모)': r.memo || ''
+        };
+      });
       const wsDaily = XLSX.utils.json_to_sheet(dailyRows);
       XLSX.utils.book_append_sheet(wb, wsDaily, '1_일자별_입고정산');
 
@@ -1263,21 +1523,27 @@
           st.pk += it.pk;
         });
       });
-      const itemRows = Array.from(itemMap.values()).sort((a, b) => b.pk - a.pk).map((st, idx) => ({
-        '순위(pk기준)': idx + 1,
-        '상품코드': st.code,
-        '상품명': st.name,
-        '입수': st.ipsu,
-        '입고횟수': st.days.size,
-        '누적 환산(pk)': st.pk,
-        '누적 발주(box)': st.box
-      }));
+      const itemRows = Array.from(itemMap.values()).sort((a, b) => b.pk - a.pk).map((st, idx) => {
+        const uPrice = getItemUnitPrice(st);
+        return {
+          '순위(pk기준)': idx + 1,
+          '상품코드': st.code,
+          '상품명': st.name,
+          '입수': st.ipsu,
+          '입고횟수': st.days.size,
+          '누적 환산(pk)': st.pk,
+          '누적 발주(box)': st.box,
+          'pk당 매입단가(원)': uPrice,
+          '누적 매입금액(원)': st.pk * uPrice
+        };
+      });
       const wsItems = XLSX.utils.json_to_sheet(itemRows);
       XLSX.utils.book_append_sheet(wb, wsItems, '2_품목별_누적통계');
 
       const detailRows = [];
       filtered.forEach(r => {
         getDisplayItems(r.items).forEach((it, idx) => {
+          const uPrice = getItemUnitPrice(it);
           detailRows.push({
             '입고일자': r.date,
             '순번': idx + 1,
@@ -1285,7 +1551,9 @@
             '상품명': it.name,
             '입수': it.ipsu,
             '발주(box)': it.box,
-            '환산(pk)': it.pk
+            '환산(pk)': it.pk,
+            'pk당 매입단가(원)': uPrice,
+            '입고 매입금액(원)': it.pk * uPrice
           });
         });
       });
@@ -1371,6 +1639,7 @@
     function saveToStorage() {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
       localStorage.setItem(RETURNS_STORAGE_KEY, JSON.stringify(returnRecords));
+      localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(unitPrices));
       pushToCloud(true);
     }
 
@@ -1396,6 +1665,17 @@
         }
       } else {
         returnRecords = [];
+      }
+
+      const savedPrices = localStorage.getItem(PRICES_STORAGE_KEY);
+      if (savedPrices) {
+        try {
+          unitPrices = JSON.parse(savedPrices) || {};
+        } catch (e) {
+          unitPrices = {};
+        }
+      } else {
+        unitPrices = {};
       }
 
       renderAll();
@@ -1471,6 +1751,7 @@ function doPost(e) {
         const payload = {
           records: records,
           returns: returnRecords,
+          unitPrices: unitPrices,
           updatedAt: new Date().toISOString()
         };
         await fetch(url, {
@@ -1480,7 +1761,7 @@ function doPost(e) {
           body: JSON.stringify(payload)
         });
         checkCloudBadge();
-        if (!silent) showToast('클라우드 서버에 입고 및 회송 데이터가 안전하게 저장되었습니다!');
+        if (!silent) showToast('클라우드 서버에 입고·회송·단가 데이터가 안전하게 저장되었습니다!');
       } catch (e) {
         console.warn('Cloud push error:', e);
         if (!silent) showToast('클라우드 업로드 중 오류가 발생했습니다.');
@@ -1497,13 +1778,12 @@ function doPost(e) {
         const res = await fetch(url + (url.includes('?') ? '&' : '?') + 't=' + Date.now());
         const data = await res.json();
         if (Array.isArray(data)) {
-          // 구버전 배열 형태 데이터 호환 처리 (로컬에 회송 내역이 있으면 유지하며 서버를 최신 포맷으로 업그레이드)
           if (data.length > 0) {
             records = data;
             localStorage.setItem(STORAGE_KEY, JSON.stringify(records));
             renderAll();
             checkCloudBadge();
-            if (returnRecords && returnRecords.length > 0) {
+            if ((returnRecords && returnRecords.length > 0) || Object.keys(unitPrices).length > 0) {
               pushToCloud(true);
             }
             if (!silent) showToast(`클라우드에서 ${records.length}건의 최신 데이터를 불러왔습니다!`);
@@ -1511,7 +1791,6 @@ function doPost(e) {
             pushToCloud(true);
           }
         } else if (data && typeof data === 'object') {
-          // 신규 객체 형태 ({ records, returns }) 호환 처리
           const hasCloudRecords = Array.isArray(data.records) && data.records.length > 0;
           const hasCloudReturns = Array.isArray(data.returns) && data.returns.length > 0;
 
@@ -1523,8 +1802,11 @@ function doPost(e) {
             returnRecords = data.returns;
             localStorage.setItem(RETURNS_STORAGE_KEY, JSON.stringify(returnRecords));
           }
+          if (data.unitPrices && typeof data.unitPrices === 'object') {
+            unitPrices = { ...unitPrices, ...data.unitPrices };
+            localStorage.setItem(PRICES_STORAGE_KEY, JSON.stringify(unitPrices));
+          }
 
-          // 클라우드가 완전히 비어있는데 로컬에 데이터가 있다면 클라우드로 초기 업로드
           if (!hasCloudRecords && !hasCloudReturns && (records.length > 0 || returnRecords.length > 0)) {
             pushToCloud(true);
           }
@@ -1542,6 +1824,7 @@ function doPost(e) {
       const payload = {
         records: records,
         returns: returnRecords,
+        unitPrices: unitPrices,
         exportedAt: new Date().toISOString()
       };
       const blob = new Blob([JSON.stringify(payload, null, 2)], { type: 'application/json' });
